@@ -100,8 +100,7 @@ spec:
         - name: home-app
           emptyDir: {}
         - name: data
-          persistentVolumeClaim:
-            claimName: web-claude-pvc
+          emptyDir: {}
 ---
 apiVersion: v1
 kind: Service

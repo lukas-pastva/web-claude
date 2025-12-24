@@ -78,7 +78,7 @@ export default function ClaudeTerminal({ repoPath }) {
         return isPhone ? 11 : (isTablet ? 12 : 13);
       } catch { return 13; }
     })();
-    const term = new Terminal({ convertEol: true, cursorBlink: true, fontSize: baseFontSize });
+    const term = new Terminal({ cursorBlink: true, fontSize: baseFontSize });
     const fit = new FitAddon();
     fitRef.current = fit;
     term.loadAddon(fit);
