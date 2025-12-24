@@ -38,10 +38,10 @@ COPY --from=be /app/backend/dist ./backend/dist
 COPY backend/package.json backend/package-lock.json* ./backend/
 RUN npm --prefix backend ci --omit=dev || npm --prefix backend i --omit=dev
 
-# Create non-root user for security
-RUN addgroup -g 1000 app && adduser -u 1000 -G app -s /bin/bash -D app
-RUN mkdir -p /home/app/.claude /data/repos && chown -R app:app /home/app /data /app
-USER app
+# Set up directories for the existing node user (uid 1000)
+RUN mkdir -p /home/node/.claude /data/repos && chown -R node:node /home/node /data /app
+USER node
+ENV HOME=/home/node
 
 # Data directory for repos
 VOLUME ["/data"]
