@@ -1,0 +1,79 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: web-codex
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: web-codex
+  template:
+    metadata:
+      labels:
+        app: web-codex
+    spec:
+      containers:
+        - name: web-codex
+          image: your-registry/web-codex:0.1.0
+          imagePullPolicy: IfNotPresent
+          ports:
+            - containerPort: 8080
+          livenessProbe:
+            httpGet:
+              path: /healthz
+              port: 8080
+            initialDelaySeconds: 10
+            periodSeconds: 10
+          readinessProbe:
+            httpGet:
+              path: /readyz
+              port: 8080
+            initialDelaySeconds: 5
+            periodSeconds: 10
+          env:
+            - name: GH_TOKEN
+              valueFrom:
+                secretKeyRef: { name: web-codex-secrets, key: GH_TOKEN }
+            - name: GH_USER
+              valueFrom:
+                secretKeyRef: { name: web-codex-secrets, key: GH_USER }
+            - name: GH_ORGS
+              valueFrom:
+                secretKeyRef: { name: web-codex-secrets, key: GH_ORGS }
+            - name: GL_TOKEN
+              valueFrom:
+                secretKeyRef: { name: web-codex-secrets, key: GL_TOKEN }
+            - name: GL_BASE_URL
+              valueFrom:
+                secretKeyRef: { name: web-codex-secrets, key: GL_BASE_URL }
+            - name: GL_GROUPS
+              valueFrom:
+                secretKeyRef: { name: web-codex-secrets, key: GL_GROUPS }
+            - name: DATA_DIR
+              value: /data/repos
+            - name: CODEX_CMD
+              value: codex
+            - name: GIT_AUTHOR_NAME
+              value: web-codex
+            - name: GIT_AUTHOR_EMAIL
+              value: web-codex@example.invalid
+          volumeMounts:
+            - name: data
+              mountPath: /data
+      volumes:
+        - name: data
+          persistentVolumeClaim:
+            claimName: web-codex-pvc
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: web-codex
+spec:
+  type: ClusterIP
+  selector:
+    app: web-codex
+  ports:
+    - name: http
+      port: 80
+      targetPort: 8080

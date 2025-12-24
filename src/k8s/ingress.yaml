@@ -1,0 +1,18 @@
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: web-codex
+  annotations:
+    kubernetes.io/ingress.class: nginx
+spec:
+  rules:
+    - host: web-codex.example.com
+      http:
+        paths:
+          - path: /
+            pathType: Prefix
+            backend:
+              service:
+                name: web-codex
+                port:
+                  number: 80

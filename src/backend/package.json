@@ -1,0 +1,22 @@
+{
+  "name": "web-codex-backend",
+  "type": "module",
+  "version": "0.1.0",
+  "main": "dist/server.js",
+  "scripts": {
+    "dev": "node --env-file=.env --watch src/server.js",
+    "build": "rm -rf dist && mkdir -p dist/frontend && cp src/server.js dist/server.js && cp -r ../frontend/dist/* dist/frontend/",
+    "start": "node dist/server.js"
+  },
+  "dependencies": {
+    "axios": "^1.7.7",
+    "body-parser": "^1.20.3",
+    "cors": "^2.8.5",
+    "express": "^4.21.1",
+    "openai": "^4.70.2",
+    "simple-git": "^3.27.0",
+    "uuid": "^9.0.1",
+    "ws": "^8.18.0",
+    "node-pty": "^1.0.0"
+  }
+}

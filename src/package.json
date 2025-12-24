@@ -1,0 +1,18 @@
+{
+  "name": "web-codex",
+  "version": "0.1.0",
+  "private": true,
+  "scripts": {
+    "build": "npm run -w frontend build && npm run -w backend build",
+    "dev": "concurrently -k -n BE,FE -c green,blue \"npm run -w backend dev\" \"npm run -w frontend dev\"",
+    "start": "node backend/dist/server.js",
+    "postinstall": "npm i -w backend && npm i -w frontend"
+  },
+  "workspaces": [
+    "backend",
+    "frontend"
+  ],
+  "devDependencies": {
+    "concurrently": "^9.0.0"
+  }
+}
