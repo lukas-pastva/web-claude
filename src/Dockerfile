@@ -38,10 +38,11 @@ COPY --from=be /app/backend/dist ./backend/dist
 COPY backend/package.json backend/package-lock.json* ./backend/
 RUN npm --prefix backend ci --omit=dev || npm --prefix backend i --omit=dev
 
-# Set up directories for the existing node user (uid 1000)
-RUN mkdir -p /home/node/.claude /data/repos && chown -R node:node /home/node /data /app
-USER node
-ENV HOME=/home/node
+# Create app user with home at /home/app (uid 1000 matches K8s securityContext)
+RUN mkdir -p /home/app/.claude /data/repos \
+    && chown -R 1000:1000 /home/app /data /app
+USER 1000
+ENV HOME=/home/app
 
 # Data directory for repos
 VOLUME ["/data"]
