@@ -81,58 +81,37 @@ function RepoList({ repos, onSelect, currentId }) {
 
 function RepoActions({ repo, meta, setMeta }) {
   const toast = useToast();
-  const [branches, setBranches] = useState([]);
-  const [current, setCurrent] = useState("");
   const [log, setLog] = useState([]);
   const [patch, setPatch] = useState("");
-  const [showPretty, setShowPretty] = useState(false);
-  const [prettyMode, setPrettyMode] = useState('unified'); // unified | side-by-side
-  const [threeWayActive, setThreeWayActive] = useState(false);
-  const [threeWayData, setThreeWayData] = useState(null);
-  const [threeWayLoading, setThreeWayLoading] = useState(false);
-  const [threeWayError, setThreeWayError] = useState('');
-  const [openFile, setOpenFile] = useState(null);
-  const [openFileContent, setOpenFileContent] = useState("");
-  // Patch preview interactions
+  const [showPretty, setShowPretty] = useState(true);
+  const [prettyMode, setPrettyMode] = useState('unified');
   const [selectedDiffFile, setSelectedDiffFile] = useState("");
   const diffPaneRef = useRef(null);
   const [isDiffFullscreen, setIsDiffFullscreen] = useState(false);
   const [manualDiffFullscreen, setManualDiffFullscreen] = useState(false);
-  // Always auto-refresh patch every 5 seconds (mobile-friendly)
   const [pullInfo, setPullInfo] = useState({ at: null, upToDate: null, behind: 0 });
   const [pulling, setPulling] = useState(false);
   const [pushing, setPushing] = useState(false);
-  // Only show the latest commit
   const [changedFiles, setChangedFiles] = useState([]);
   const [showAllChanged, setShowAllChanged] = useState(false);
-  // Copy feedback state for the copy-hash button
   const [copied, setCopied] = useState(false);
   const copiedTimerRef = useRef(null);
-  // Haptics: vibrate on new changes when supported (mobile)
   const prevChangedCountRef = useRef(0);
   const lastVibeAtRef = useRef(0);
-
-  const loadBranches = async () => {
-    const r = await axios.get("/api/git/branches", { params: { repoPath: meta.repoPath }});
-    setBranches(r.data.all || []);
-    setCurrent(r.data.current || "");
-  };
 
   const refreshLog = async () => {
     const r = await axios.get("/api/git/log", { params: { repoPath: meta.repoPath }});
     setLog(r.data.commits || []);
   };
+
   const refreshStatus = async () => {
     const r = await axios.get("/api/git/status", { params: { repoPath: meta.repoPath }});
     const behind = Number(r.data.status?.behind || 0);
     setPullInfo(p => ({ ...p, upToDate: behind === 0, behind }));
   };
 
-  // Keyboard shortcuts removed for simplicity and mobile friendliness
-
   useEffect(() => {
     if (meta.repoPath) {
-      loadBranches();
       refreshLog();
       refreshStatus();
       refreshDiff();
@@ -165,12 +144,6 @@ function RepoActions({ repo, meta, setMeta }) {
     } finally {
       setPulling(false);
     }
-  };
-
-  const doCheckout = async (b) => {
-    await axios.post("/api/git/checkout", { repoPath: meta.repoPath, branch: b });
-    await loadBranches();
-    await refreshDiff();
   };
 
   const refreshDiff = async () => {
@@ -308,21 +281,6 @@ function RepoActions({ repo, meta, setMeta }) {
     return extractFileDiff(patch || "", selectedDiffFile) || "";
   }, [patch, selectedDiffFile]);
 
-  // Load three-way contents when activated and a file is selected
-  useEffect(() => {
-    const run = async () => {
-      if (!threeWayActive || !meta.repoPath || !selectedDiffFile) return;
-      setThreeWayLoading(true); setThreeWayError('');
-      try {
-        const r = await axios.get('/api/git/threeway', { params: { repoPath: meta.repoPath, path: selectedDiffFile } });
-        setThreeWayData(r.data);
-      } catch (e) {
-        setThreeWayError(e?.response?.data?.error || e?.message || 'Failed to load three-way');
-      } finally { setThreeWayLoading(false); }
-    };
-    run().catch(()=>{});
-  }, [threeWayActive, meta.repoPath, selectedDiffFile]);
-
   // Fullscreen handling for diff pane
   useEffect(() => {
     const onFsChange = () => {
@@ -429,178 +387,121 @@ function RepoActions({ repo, meta, setMeta }) {
   return (
     <div className="row">
       <div className="col main-col">
-        <div className="pane">
-          <div className="actions" style={{marginBottom:8, display:'flex', flexWrap:'wrap', gap:8, alignItems:'center'}}>
-            {(() => { const disabled = pulling; return (
-              <button
-                className={"secondary"}
-                onClick={doPull}
-                disabled={disabled}
-                title={pulling ? 'Pulling…' : 'Fetch and pull latest'}
-                style={disabled ? { opacity: 0.6, cursor: 'not-allowed' } : {}}
-              >
-                {pulling
-                  ? (<><span className="spinner" aria-hidden="true" /> Pulling…</>)
-                  : (pullInfo.upToDate ? 'Up to date' : 'git pull')}
-              </button>
-            ); })()}
-            <span className="muted">
-              {pullInfo.at
-                ? `Last pull: ${new Date(pullInfo.at).toLocaleTimeString()}`
-                : (pullInfo.upToDate === null ? 'Never pulled' : (pullInfo.behind > 0 ? `Behind ${pullInfo.behind}` : ''))}
-            </span>
-            <select id="branch-select" value={current} onChange={e => doCheckout(e.target.value)}>
-              {branches.map(b => <option key={b} value={b}>{b}</option>)}
-            </select>
-            {(() => { const canPush = Boolean((patch||"").trim()); return (
-              <button onClick={doApplyCommitPush} disabled={!canPush || pushing} style={(!canPush || pushing) ? {opacity:0.6, cursor:'not-allowed'} : {}}>
-                {pushing ? '⏳ Pushing…' : 'Apply & Push'}
-              </button>
-            );})()}
-          </div>
-          {/* Last commit info moved into the same pane as git pull */}
-          <div className="muted" style={{display:'flex',justifyContent:'space-between',alignItems:'center',marginTop:8}}>
-            <span>Last commit</span>
-            <span></span>
-          </div>
-          <div className="repo">
-            {log && log.length ? (
-              <>
-                <div className="muted">
-                  <a href={log[0].web_url || '#'} target="_blank" rel="noreferrer" title="Open in provider">
-                    {log[0].hash.slice(0, 8)}
-                  </a>
-                  {` · ${new Date(log[0].date).toLocaleString()}`}
-                </div>
-                <div style={{display:'flex', gap:8, alignItems:'center'}}>
-                  <button
-                    className={"secondary" + (copied ? " copied" : "")}
-                    onClick={() => copyHash(log[0].hash)}
-                    title="Copy full commit hash"
-                    aria-live="polite"
-                  >
-                    {copied ? '✓ Copied' : 'copy hash'}
-                  </button>
-                </div>
-              </>
-            ) : (
-              <div className="muted">No commits</div>
+        {/* Git Actions Card */}
+        <div className="card">
+          <div className="card-header">
+            <span className="card-title">Git Actions</span>
+            {log && log.length > 0 && (
+              <span className="commit-badge">
+                <a href={log[0].web_url || '#'} target="_blank" rel="noreferrer">
+                  {log[0].hash.slice(0, 7)}
+                </a>
+              </span>
             )}
           </div>
-        </div>
-
-        <FileTree repoPath={meta.repoPath} onOpen={async (p)=>{ const r=await axios.get("/api/git/file",{params:{repoPath:meta.repoPath,path:p}}); setOpenFile(p); setOpenFileContent(r.data.text||""); }} />
-        {/* Patch preview moved here so that on desktop the terminal can occupy the left column alone */}
-        <div
-          ref={diffPaneRef}
-          className="pane"
-          style={(isDiffFullscreen || manualDiffFullscreen)
-            ? { height: '100vh', display: 'flex', flexDirection: 'column', position: 'fixed', top: 0, left: 0, right: 0, bottom: 0, zIndex: 9999, borderRadius: 0, margin: 0 }
-            : { marginTop: 16 }}
-        >
-          <div className="muted" style={{display:"flex",justifyContent:"space-between",alignItems:"center",gap:8}}>
-            <span style={{display:'inline-flex',alignItems:'center',gap:8}}>
-              <span>Patch preview</span>
-              {changedFiles.length > 0 && (
-                <span className="tag" title="Changed files count">{changedFiles.length} changed</span>
+          <div className="card-actions">
+            <button
+              className={`btn ${pulling ? 'btn-loading' : pullInfo.upToDate ? 'btn-success' : 'btn-secondary'}`}
+              onClick={doPull}
+              disabled={pulling}
+            >
+              {pulling ? (
+                <><span className="spinner" /> Pulling...</>
+              ) : pullInfo.upToDate ? (
+                <><span className="icon">✓</span> Up to date</>
+              ) : (
+                <><span className="icon">↓</span> Pull</>
               )}
-            </span>
-            <span style={{display:'inline-flex',alignItems:'center',gap:6,flexWrap:'wrap',justifyContent:'flex-end'}}>
-              <span className="muted" style={{marginRight:4}}>View:</span>
+            </button>
+            <button
+              className={`btn ${pushing ? 'btn-loading' : 'btn-primary'}`}
+              onClick={doApplyCommitPush}
+              disabled={!(patch||"").trim() || pushing}
+            >
+              {pushing ? (
+                <><span className="spinner" /> Pushing...</>
+              ) : (
+                <><span className="icon">↑</span> Push</>
+              )}
+            </button>
+            {log && log.length > 0 && (
               <button
-                className={"secondary" + (!showPretty && !threeWayActive ? " active" : "")}
-                onClick={() => { setThreeWayActive(false); setShowPretty(false); }}
-                title="Raw unified diff"
-              >Raw</button>
-              <button
-                className={"secondary" + (showPretty && prettyMode==='unified' && !threeWayActive ? " active" : "")}
-                onClick={() => { setThreeWayActive(false); setShowPretty(true); setPrettyMode('unified'); }}
-                title="Pretty diff (unified)"
-              >Pretty</button>
-              <button
-                className={"secondary" + (showPretty && prettyMode==='side-by-side' && !threeWayActive ? " active" : "")}
-                onClick={() => { setThreeWayActive(false); setShowPretty(true); setPrettyMode('side-by-side'); }}
-                title="Pretty diff (side-by-side)"
-              >Side-by-side</button>
-              <button
-                className={"secondary" + (threeWayActive ? " active" : "")}
-                onClick={() => setThreeWayActive(v => !v)}
-                disabled={!selectedDiffFile}
-                title={selectedDiffFile ? 'Three-way (base / HEAD / upstream)' : 'Select a file to enable three-way'}
-                style={!selectedDiffFile ? { opacity: 0.6, cursor: 'not-allowed' } : {}}
-              >3‑way</button>
-              <button
-                className={"secondary icon" + ((isDiffFullscreen || manualDiffFullscreen) ? " active" : "")}
-                onClick={toggleDiffFullscreen}
-                title={(isDiffFullscreen || manualDiffFullscreen) ? 'Exit fullscreen' : 'Fullscreen patch'}
-              >{(isDiffFullscreen || manualDiffFullscreen) ? '⤡' : '⤢'}</button>
-            </span>
+                className={`btn btn-ghost ${copied ? 'btn-copied' : ''}`}
+                onClick={() => copyHash(log[0].hash)}
+                title="Copy commit hash"
+              >
+                {copied ? '✓' : '📋'}
+              </button>
+            )}
           </div>
-          {changedFiles.length > 0 && (
-            <div className="muted" style={{margin:"6px 0 8px 0"}}>
-              <div>
-                <div style={{display:'flex',flexWrap:'wrap',gap:6}}>
-                  {(showAllChanged ? changedFiles : changedFiles.slice(0, 15)).map((f, idx) => {
-                    const active = selectedDiffFile === f.path;
-                    const cls = "badge " + (f.status==='added'?'green':(f.status==='deleted'?'red':'gray')) + (active ? " selected" : " interactive");
-                    const onClick = () => setSelectedDiffFile(p => (p === f.path ? "" : f.path));
-                    const onKey = (e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); onClick(); } };
-                    return (
-                      <span
-                        key={idx}
-                        className={cls}
-                        title={(f.status||'') + (active ? ' • selected' : '')}
-                        role="button"
-                        tabIndex={0}
-                        onClick={onClick}
-                        onKeyDown={onKey}
-                        aria-pressed={active ? 'true' : 'false'}
-                      >{f.path}</span>
-                    );
-                  })}
-                  {(!showAllChanged && changedFiles.length > 15) && (
-                    <button className="secondary" onClick={() => setShowAllChanged(true)}>+{changedFiles.length - 15} more</button>
-                  )}
-                </div>
-              </div>
+          {pullInfo.behind > 0 && (
+            <div className="status-bar warning">
+              {pullInfo.behind} commit{pullInfo.behind > 1 ? 's' : ''} behind
             </div>
           )}
-          {(threeWayActive && selectedDiffFile) ? (
-            <div style={isDiffFullscreen ? { flex: 1, display:'flex', flexDirection:'column', minHeight:0 } : {}}>
-              {threeWayLoading ? (
-                <div className="muted">Loading 3‑way…</div>
-              ) : threeWayError ? (
-                <div className="muted">{threeWayError}</div>
-              ) : (threeWayData ? (
-                <div>
-                  <div className="muted" style={{display:'flex',gap:8,marginBottom:8,flexWrap:'wrap'}}>
-                    <span>Base: {threeWayData.baseRef?.slice?.(0,8) || 'n/a'}</span>
-                    <span>Ours: {threeWayData.oursRef || 'HEAD'}</span>
-                    <span>Theirs: {threeWayData.theirsRef || ''}</span>
-                  </div>
-                  <div style={{display:'grid', gridTemplateColumns:'1fr 1fr 1fr', gap:8, alignItems:'stretch'}}>
-                    <div>
-                      <div className="muted" style={{marginBottom:4}}>Base</div>
-                      <code className="diff" style={{maxHeight:isDiffFullscreen? 'none':'50vh'}}>{threeWayData.base || ''}</code>
-                    </div>
-                    <div>
-                      <div className="muted" style={{marginBottom:4}}>Ours (HEAD)</div>
-                      <code className="diff" style={{maxHeight:isDiffFullscreen? 'none':'50vh'}}>{threeWayData.ours || ''}</code>
-                    </div>
-                    <div>
-                      <div className="muted" style={{marginBottom:4}}>Theirs (upstream)</div>
-                      <code className="diff" style={{maxHeight:isDiffFullscreen? 'none':'50vh'}}>{threeWayData.theirs || ''}</code>
-                    </div>
-                  </div>
-                </div>
-              ) : null)}
-            </div>
-          ) : ((displayedPatch || '').trim() ? (
-            showPretty
-              ? <DiffPretty diff={displayedPatch} mode={prettyMode === 'side-by-side' ? 'side-by-side' : 'unified'} />
-              : <code className="diff" style={isDiffFullscreen ? { flex: 1, minHeight: 0, maxHeight: 'none' } : {}}>{displayedPatch}</code>
-          ) : null)}
         </div>
+
+        <FileTree repoPath={meta.repoPath} onOpen={async (p)=>{ const r=await axios.get("/api/git/file",{params:{repoPath:meta.repoPath,path:p}}); }} />
+        {/* Diff Preview Card */}
+        {(patch || "").trim() && (
+          <div
+            ref={diffPaneRef}
+            className={`card diff-card ${(isDiffFullscreen || manualDiffFullscreen) ? 'fullscreen' : ''}`}
+          >
+            <div className="card-header">
+              <span className="card-title">
+                Changes
+                {changedFiles.length > 0 && (
+                  <span className="count-badge">{changedFiles.length}</span>
+                )}
+              </span>
+              <div className="view-toggles">
+                <button
+                  className={`toggle-btn ${showPretty ? '' : 'active'}`}
+                  onClick={() => setShowPretty(false)}
+                >Raw</button>
+                <button
+                  className={`toggle-btn ${showPretty ? 'active' : ''}`}
+                  onClick={() => setShowPretty(true)}
+                >Pretty</button>
+                <button
+                  className="toggle-btn icon-btn"
+                  onClick={toggleDiffFullscreen}
+                >
+                  {(isDiffFullscreen || manualDiffFullscreen) ? '✕' : '⤢'}
+                </button>
+              </div>
+            </div>
+            {changedFiles.length > 0 && (
+              <div className="file-chips">
+                {(showAllChanged ? changedFiles : changedFiles.slice(0, 10)).map((f, idx) => {
+                  const active = selectedDiffFile === f.path;
+                  return (
+                    <button
+                      key={idx}
+                      className={`chip ${f.status} ${active ? 'active' : ''}`}
+                      onClick={() => setSelectedDiffFile(p => (p === f.path ? "" : f.path))}
+                    >
+                      {f.path.split('/').pop()}
+                    </button>
+                  );
+                })}
+                {(!showAllChanged && changedFiles.length > 10) && (
+                  <button className="chip more" onClick={() => setShowAllChanged(true)}>
+                    +{changedFiles.length - 10}
+                  </button>
+                )}
+              </div>
+            )}
+            <div className="diff-content">
+              {showPretty ? (
+                <DiffPretty diff={displayedPatch} mode="unified" />
+              ) : (
+                <code className="diff-raw">{displayedPatch}</code>
+              )}
+            </div>
+          </div>
+        )}
       </div>
 
       <div className="col cli-col">
