@@ -1,6 +1,6 @@
 import React, { useEffect, useMemo, useRef, useState } from "react";
 import axios from "axios";
-import CodexTerminal from "./Terminal.jsx";
+import ClaudeTerminal from "./Terminal.jsx";
 import FileTree from "./FileTree.jsx";
 import DiffPretty from "./DiffPretty.jsx";
 import { ToastProvider, useToast } from "./ToastContext.jsx";
@@ -257,7 +257,7 @@ function RepoActions({ repo, meta, setMeta }) {
   const doApplyCommitPush = async () => {
     try {
       setPushing(true);
-      const message = "codex-" + new Date().toISOString();
+      const message = "claude-" + new Date().toISOString();
       await axios.post("/api/git/commitPush", { repoPath: meta.repoPath, message });
       await refreshLog();
       await refreshDiff();
@@ -604,7 +604,7 @@ function RepoActions({ repo, meta, setMeta }) {
       </div>
 
       <div className="col cli-col">
-        <CodexTerminal repoPath={meta.repoPath} />
+        <ClaudeTerminal repoPath={meta.repoPath} />
       </div>
     </div>
   )
@@ -795,7 +795,7 @@ export default function App() {
     <div>
       
       <header>
-        <div style={{cursor:'pointer'}} onClick={handleGoHome} title="Home (repos)"><strong>web-codex</strong></div>
+        <div style={{cursor:'pointer'}} onClick={handleGoHome} title="Home (repos)"><strong>web-claude</strong></div>
         
         <div style={{marginLeft:'auto', display:'flex', gap:8, alignItems:'center'}}>
           <button className="secondary icon" onClick={cycleTheme} title={`Theme: ${themeMode}`}>{themeIcon}</button>

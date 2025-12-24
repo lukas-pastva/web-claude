@@ -6,11 +6,11 @@ import bodyParser from "body-parser";
 import cors from "cors";
 import path from "path";
 import fs from "fs";
+import os from "os";
 import { fileURLToPath } from "url";
 import axios from "axios";
 import { v4 as uuidv4 } from "uuid";
 import simpleGit from "simple-git";
-import OpenAI from "openai";
 import { spawnSync } from "child_process";
 
 const __filename = fileURLToPath(import.meta.url);
@@ -40,7 +40,7 @@ function formatErr(err) {
 
 // Config endpoint
 app.get("/api/config", (req, res) => {
-  res.json({ openai: Boolean(OPENAI_API_KEY), cliPatch: Boolean(process.env.CODEX_PATCH_CMD), debug: DEBUG });
+  res.json({ claude: true, cliPatch: Boolean(process.env.CLAUDE_PATCH_CMD), debug: DEBUG });
 });
 
 // ---- Configuration ----
@@ -48,8 +48,11 @@ const PORT = process.env.PORT || 8080;
 const DATA_DIR = process.env.DATA_DIR || "/data/repos";
 const TMP_ROOT = path.join(DATA_DIR, "_tmp");
 if (!fs.existsSync(TMP_ROOT)) fs.mkdirSync(TMP_ROOT, { recursive: true });
-const OPENAI_API_KEY = process.env.OPENAI_API_KEY;
-const OPENAI_MODEL = process.env.OPENAI_MODEL || "gpt-5-codex";
+
+// Claude credentials path (default: ~/.claude/.credentials.json)
+const CLAUDE_CREDENTIALS_PATH = process.env.CLAUDE_CREDENTIALS_PATH || path.join(os.homedir(), ".claude", ".credentials.json");
+const CLAUDE_CMD = "claude";
+
 const GH_TOKEN = process.env.GH_TOKEN || "";
 const GH_USER = process.env.GH_USER || "";
 const GH_ORGS = (process.env.GH_ORGS || "").split(",").map(s => s.trim()).filter(Boolean);
@@ -59,8 +62,18 @@ const GL_GROUPS = (process.env.GL_GROUPS || "").split(",").map(s => s.trim()).fi
 
 if (!fs.existsSync(DATA_DIR)) fs.mkdirSync(DATA_DIR, { recursive: true });
 
-// ---- OpenAI Client ----
-const openai = OPENAI_API_KEY ? new OpenAI({ apiKey: OPENAI_API_KEY }) : null;
+// ---- Claude Credentials Helper ----
+function getClaudeCredentials() {
+  try {
+    if (fs.existsSync(CLAUDE_CREDENTIALS_PATH)) {
+      const content = fs.readFileSync(CLAUDE_CREDENTIALS_PATH, "utf-8");
+      return JSON.parse(content);
+    }
+  } catch (e) {
+    dlog("Failed to read Claude credentials:", e.message);
+  }
+  return null;
+}
 
 // ---- Utilities ----
 function safeJoin(base, p) {
@@ -273,13 +286,13 @@ app.post("/api/git/commitPush", async (req, res) => {
     const git = simpleGit(repoPath);
     await git.add("--all");
     // Ensure author/committer identity is set locally for this repo
-    const name = process.env.GIT_AUTHOR_NAME || process.env.GIT_COMMITTER_NAME || GH_USER || "codex";
-    const email = process.env.GIT_AUTHOR_EMAIL || process.env.GIT_COMMITTER_EMAIL || (GH_USER ? `${GH_USER}@users.noreply.github.com` : "codex@example.invalid");
+    const name = process.env.GIT_AUTHOR_NAME || process.env.GIT_COMMITTER_NAME || GH_USER || "claude";
+    const email = process.env.GIT_AUTHOR_EMAIL || process.env.GIT_COMMITTER_EMAIL || (GH_USER ? `${GH_USER}@users.noreply.github.com` : "claude@example.invalid");
     try {
       await git.addConfig("user.name", name);
       await git.addConfig("user.email", email);
     } catch {}
-    const msg = message || `codex-${new Date().toISOString()}`;
+    const msg = message || `claude-${new Date().toISOString()}`;
     const commit = await git.commit(msg);
     // Push with token in remote URL if needed
     const remotes = await git.getRemotes(true);
@@ -398,14 +411,13 @@ app.get("/api/git/threeway", async (req, res) => {
   }
 });
 
-// ---- AI Patch (Unified Diff) ----
-// ---- CLI Patch (Unified Diff via local Codex CLI) ----
+// ---- CLI Patch (Unified Diff via local Claude CLI) ----
 app.post("/api/cli/patch", async (req, res) => {
   try {
     const { repoPath, instruction } = req.body;
-    const PATCH_CMD_TPL = process.env.CODEX_PATCH_CMD || "";
+    const PATCH_CMD_TPL = process.env.CLAUDE_PATCH_CMD || "";
     if (!PATCH_CMD_TPL) {
-      return res.status(400).json({ error: "CLI patch disabled. Set CODEX_PATCH_CMD (e.g., \"codex < {{instruction_file}}\")." });
+      return res.status(400).json({ error: "CLI patch disabled. Set CLAUDE_PATCH_CMD (e.g., \"claude < {{instruction_file}}\")." });
     }
     if (!repoPath || !fs.existsSync(repoPath)) {
       return res.status(400).json({ error: "Invalid repoPath" });
@@ -417,7 +429,7 @@ app.post("/api/cli/patch", async (req, res) => {
     // add worktree at HEAD
     await git.raw(["worktree", "add", tmpDir, "HEAD"]);
     try {
-      const instrFile = path.join(tmpDir, "_codex_instruction.txt");
+      const instrFile = path.join(tmpDir, "_claude_instruction.txt");
       fs.writeFileSync(instrFile, instruction || "", "utf-8");
       // Build command from template
       const cmd = PATCH_CMD_TPL
@@ -472,91 +484,7 @@ app.get("/api/git/diff", async (req, res) => {
   }
 });
 
-// ---- AI Patch (Unified Diff) ----
-app.post("/api/ai/patch", async (req, res) => {
-  try {
-    const { repoPath, instruction, fileHints = [] } = req.body;
-    if (!OPENAI_API_KEY) throw new Error("OPENAI_API_KEY is not set");
-
-    // Collect small context: repo tree (limited) + selected files content (if provided)
-    function listFiles(dir, acc = [], root = dir) {
-      const entries = fs.readdirSync(dir, { withFileTypes: true });
-      for (const e of entries) {
-        if (e.name === ".git") continue;
-        const full = path.join(dir, e.name);
-        if (e.isDirectory()) listFiles(full, acc, root);
-        else acc.push(path.relative(root, full));
-      }
-      return acc;
-    }
-    const tree = listFiles(repoPath).filter(f => !f.includes("node_modules")).slice(0, 500);
-    const pick = (p) => {
-      const abs = safeJoin(repoPath, p);
-      if (fs.existsSync(abs) && fs.statSync(abs).size <= 120000) {
-        return "\n--- FILE: " + p + " ---\n" + fs.readFileSync(abs, "utf-8");
-      } else return "\n--- FILE: " + p + " ---\n<omitted due to size>";
-    };
-
-    const filesContext = (fileHints || []).slice(0, 8).map(pick).join("\n");
-
-    const system = `You are CodePatchGPT. You edit a Git repository by producing a VALID unified diff (patch) in one block.
-Rules:
-- ONLY output the patch inside a single fenced code block tagged 'diff'.
-- Use paths relative to repo root.
-- Keep changes minimal and idempotent.
-- If creating a new file, include proper diff headers (e.g., new file mode 100644).
-- Do not include explanations or extra text outside the diff block.`;
-
-    const prompt = `Repo has ~${tree.length} files. User instruction:
-"""
-${instruction}
-"""
-
-Optional file samples for context:
-${filesContext || "(none)"}
-
-Now return a unified diff that applies cleanly. If no changes are needed, return an empty patch block (with no hunks).`;
-
-    // Use Responses API (preferred) and fall back to Chat Completions if necessary
-    let patchText = "";
-    try {
-      const resp = await openai.responses.create({
-        model: OPENAI_MODEL,
-        input: prompt,
-        instructions: system
-      });
-      patchText = (resp.output_text || "").trim();
-    } catch (e) {
-      const resp = await openai.chat.completions.create({
-        model: OPENAI_MODEL,
-        messages: [
-          { role: "system", content: system },
-          { role: "user", content: prompt }
-        ]
-      });
-      patchText = resp.choices?.[0]?.message?.content?.trim() || "";
-    }
-
-    // Extract code block with diff
-    const m = patchText.match(/```diff([\s\S]*?)```/);
-    const rawPatch = (m ? m[1] : patchText).trim();
-    if (!rawPatch) throw new Error("Model did not return a patch");
-
-    // Validate patch (dry run)
-    const git = simpleGit(repoPath);
-    try {
-      await git.raw(["apply", "--check", "-p0"], rawPatch);
-    } catch (e) {
-      // Try with -p1 (paths often prefixed with a/ and b/)
-      await git.raw(["apply", "--check", "-p1"], rawPatch);
-    }
-
-    res.json({ ok: true, patch: rawPatch });
-  } catch (err) {
-    console.error("ai/patch error:", formatErr(err));
-    res.status(500).json({ error: err.message });
-  }
-});
+// ---- AI Patch endpoint removed - use Claude CLI directly via terminal ----
 
 app.post("/api/git/apply-commit-push", async (req, res) => {
   try {
@@ -568,7 +496,7 @@ app.post("/api/git/apply-commit-push", async (req, res) => {
       await git.raw(["apply", "-p1"], patch);
     }
     await git.add("--all");
-    const msg = message || `codex-${new Date().toISOString()}`;
+    const msg = message || `claude-${new Date().toISOString()}`;
     const commit = await git.commit(msg);
     const remotes = await git.getRemotes(true);
     let origin = remotes.find(r => r.name === "origin");
@@ -615,7 +543,7 @@ if (fs.existsSync(frontendDir)) {
   app.use("/", express.static(frontendDir));
   app.get("*", (req, res) => res.sendFile(path.join(frontendDir, "index.html")));
 } else {
-  app.get("/", (req, res) => res.send("web-codex backend is running. Build the frontend to serve UI."));
+  app.get("/", (req, res) => res.send("web-claude backend is running. Build the frontend to serve UI."));
 }
 
 const server = http.createServer(app);
@@ -650,19 +578,25 @@ wss.on("connection", (ws, req) => {
   try {
     const url = new URL(req.url, "http://localhost");
     const repoPath = url.searchParams.get("repoPath") || "";
-    const cmd = process.env.CODEX_CMD || "codex"; // configurable
+    const cmd = CLAUDE_CMD; // configurable via CLAUDE_CMD env var
     // Validate repoPath and set cwd
     let cwd = DATA_DIR;
     if (repoPath) {
       try { cwd = safeJoin(DATA_DIR, path.relative(DATA_DIR, repoPath)); } catch { /* fallback */ }
     }
     const shell = process.env.SHELL || "/bin/sh";
+    // Set up environment for Claude CLI (credentials in ~/.claude/.credentials.json)
+    const claudeEnv = { ...process.env };
+    // If Claude credentials path is explicitly set, pass it along
+    if (CLAUDE_CREDENTIALS_PATH && CLAUDE_CREDENTIALS_PATH !== path.join(os.homedir(), ".claude", ".credentials.json")) {
+      claudeEnv.CLAUDE_CONFIG_DIR = path.dirname(CLAUDE_CREDENTIALS_PATH);
+    }
     const p = pty.spawn(shell, ["-lc", cmd], {
       name: "xterm-color",
       cols: 120,
       rows: 30,
       cwd,
-      env: { ...process.env, OPENAI_API_KEY }
+      env: claudeEnv
     });
     // Mark alive for heartbeat; browsers auto-respond to ping with pong
     ws.isAlive = true;
@@ -675,7 +609,7 @@ wss.on("connection", (ws, req) => {
 });
 
 server.listen(PORT, () => {
-  console.log(`web-codex listening on :${PORT}`);
+  console.log(`web-claude listening on :${PORT}`);
 });
 
 

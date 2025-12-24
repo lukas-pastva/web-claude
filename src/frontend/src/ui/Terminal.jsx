@@ -3,7 +3,7 @@ import { Terminal } from 'xterm';
 import { FitAddon } from 'xterm-addon-fit';
 import 'xterm/css/xterm.css';
 
-export default function CodexTerminal({ repoPath }) {
+export default function ClaudeTerminal({ repoPath }) {
   const ref = useRef(null);
   const containerRef = useRef(null);
   const termRef = useRef(null);
@@ -89,7 +89,7 @@ export default function CodexTerminal({ repoPath }) {
     // Refit on window resize
     const onResize = () => { try { fitRef.current && fitRef.current.fit(); } catch {} };
     window.addEventListener('resize', onResize);
-    term.writeln('\x1b[1;34mweb-codex\x1b[0m — attaching to Codex CLI...');
+    term.writeln('\x1b[1;34mweb-claude\x1b[0m — attaching to Claude CLI...');
     const proto = (location.protocol === 'https:') ? 'wss' : 'ws';
     const ws = new WebSocket(`${proto}://${location.host}/ws/terminal?repoPath=${encodeURIComponent(repoPath||'')}`);
     wsRef.current = ws;
