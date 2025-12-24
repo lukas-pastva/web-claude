@@ -27,15 +27,22 @@ RUN npm --prefix backend run build
 FROM node:20-alpine
 WORKDIR /app
 ENV NODE_ENV=production
-# Build deps for node-pty; shell tools; optional git; PHP CLI for Codex tasks
-RUN apk add --no-cache bash git g++ make python3 linux-headers \
-    && (apk add --no-cache php || apk add --no-cache php83 php83-cli)
-# Optional: install Codex CLI if available in your registry
-# If your Codex CLI package name differs, set CODEX_CMD accordingly
-RUN npm i -g @openai/codex || true
+# Build deps for node-pty; shell tools; git
+RUN apk add --no-cache bash git g++ make python3 linux-headers
+
+# Install Claude CLI globally
+RUN npm i -g @anthropic-ai/claude-code
+
+# Copy backend build
 COPY --from=be /app/backend/dist ./backend/dist
 COPY backend/package.json backend/package-lock.json* ./backend/
 RUN npm --prefix backend ci --omit=dev || npm --prefix backend i --omit=dev
+
+# Create non-root user for security
+RUN addgroup -g 1000 app && adduser -u 1000 -G app -s /bin/bash -D app
+RUN mkdir -p /home/app/.claude /data/repos && chown -R app:app /home/app /data /app
+USER app
+
 # Data directory for repos
 VOLUME ["/data"]
 EXPOSE 8080
