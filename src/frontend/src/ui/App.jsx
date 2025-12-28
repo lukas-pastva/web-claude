@@ -231,10 +231,28 @@ function RepoActions({ repo, meta, setMeta }) {
     try {
       setPushing(true);
       const message = "claude-" + new Date().toISOString();
-      await axios.post("/api/git/commitPush", { repoPath: meta.repoPath, message });
+      const res = await axios.post("/api/git/commitPush", { repoPath: meta.repoPath, message });
+      const fullHash = res.data?.commit?.commit || '';
       await refreshLog();
       await refreshDiff();
-      toast && toast("Pushed ✅");
+      // Copy full commit hash to clipboard
+      if (fullHash) {
+        try {
+          await navigator.clipboard.writeText(fullHash);
+        } catch {
+          try {
+            const ta = document.createElement('textarea');
+            ta.value = fullHash;
+            ta.style.position = 'fixed';
+            ta.style.opacity = '0';
+            document.body.appendChild(ta);
+            ta.select();
+            document.execCommand('copy');
+            document.body.removeChild(ta);
+          } catch {}
+        }
+      }
+      toast && toast(fullHash ? `Pushed ${fullHash.slice(0, 7)} (copied) ✅` : "Pushed ✅");
     } catch (e) {
       const msg = e?.response?.data?.error || e?.message || "Push failed";
       try { toast && toast(`Push failed: ${msg}`); } catch {}
