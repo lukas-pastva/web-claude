@@ -13,6 +13,8 @@ export default function FileTree({ repoPath, onOpen }) {
 
   const listed = items.slice(0, 500);
 
+  if (listed.length === 0) return null;
+
   return (
     <div className="pane">
       <div style={{maxHeight:'40vh',overflow:'auto'}}>
