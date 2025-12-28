@@ -92,6 +92,7 @@ function RepoActions({ repo, meta, setMeta }) {
   const [pullInfo, setPullInfo] = useState({ at: null, upToDate: null, behind: 0 });
   const [pulling, setPulling] = useState(false);
   const [pushing, setPushing] = useState(false);
+  const [rolling, setRolling] = useState(false);
   const [changedFiles, setChangedFiles] = useState([]);
   const [showAllChanged, setShowAllChanged] = useState(false);
   const [copied, setCopied] = useState(false);
@@ -259,6 +260,22 @@ function RepoActions({ repo, meta, setMeta }) {
       try { alert(`Push failed: ${msg}`); } catch {}
     } finally {
       setPushing(false);
+    }
+  };
+
+  const doRollback = async () => {
+    if (!confirm("Discard all uncommitted changes? This cannot be undone.")) return;
+    try {
+      setRolling(true);
+      await axios.post("/api/git/rollback", { repoPath: meta.repoPath });
+      await refreshDiff();
+      toast && toast("Changes discarded ✅");
+    } catch (e) {
+      const msg = e?.response?.data?.error || e?.message || "Rollback failed";
+      try { toast && toast(`Rollback failed: ${msg}`); } catch {}
+      try { alert(`Rollback failed: ${msg}`); } catch {}
+    } finally {
+      setRolling(false);
     }
   };
 
@@ -440,6 +457,18 @@ function RepoActions({ repo, meta, setMeta }) {
                 <><span className="spinner" /> Pushing...</>
               ) : (
                 <><span className="icon">↑</span> Push</>
+              )}
+            </button>
+            <button
+              className={`btn ${rolling ? 'btn-loading' : 'btn-danger'}`}
+              onClick={doRollback}
+              disabled={!(patch||"").trim() || rolling}
+              title="Discard all uncommitted changes"
+            >
+              {rolling ? (
+                <><span className="spinner" /> Rolling back...</>
+              ) : (
+                <><span className="icon">↩</span> Rollback</>
               )}
             </button>
             {log && log.length > 0 && (

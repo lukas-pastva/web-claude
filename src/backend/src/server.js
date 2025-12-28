@@ -306,6 +306,22 @@ app.post("/api/git/commitPush", async (req, res) => {
   }
 });
 
+// ---- Git rollback (discard all uncommitted changes) ----
+app.post("/api/git/rollback", async (req, res) => {
+  try {
+    const { repoPath } = req.body;
+    if (!repoPath) return res.status(400).json({ error: "repoPath is required" });
+    const git = simpleGit(repoPath);
+    // Discard changes to tracked files
+    await git.checkout(["."]);
+    // Remove untracked files and directories
+    await git.clean("f", ["-d"]);
+    res.json({ ok: true });
+  } catch (err) {
+    if (DEBUG) console.error("rollback error:", formatErr(err));
+    res.status(500).json({ error: err.message });
+  }
+});
 
 // ---- Git status (working tree) ----
 app.get("/api/git/status", async (req, res) => {
