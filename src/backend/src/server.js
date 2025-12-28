@@ -603,7 +603,22 @@ wss.on("connection", (ws, req) => {
     ws.on("pong", heartbeat);
     p.onData(data => ws.readyState === 1 && ws.send(data));
     p.onExit(() => { try { ws.close(); } catch {} });
-    ws.on("message", msg => { try { p.write(msg.toString()); } catch {} });
+    ws.on("message", msg => {
+      try {
+        const str = msg.toString();
+        // Check if it's a resize command
+        if (str.startsWith('{"type":"resize"')) {
+          try {
+            const data = JSON.parse(str);
+            if (data.type === 'resize' && data.cols && data.rows) {
+              p.resize(Math.max(1, data.cols), Math.max(1, data.rows));
+              return;
+            }
+          } catch {}
+        }
+        p.write(str);
+      } catch {}
+    });
     ws.on("close", () => { try { p.kill(); } catch {} });
   } catch (e) { try { if (DEBUG) console.error("ws/terminal error:", e?.message || e); ws.close(); } catch {} }
 });

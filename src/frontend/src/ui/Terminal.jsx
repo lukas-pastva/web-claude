@@ -93,12 +93,34 @@ export default function ClaudeTerminal({ repoPath }) {
     const proto = (location.protocol === 'https:') ? 'wss' : 'ws';
     const ws = new WebSocket(`${proto}://${location.host}/ws/terminal?repoPath=${encodeURIComponent(repoPath||'')}`);
     wsRef.current = ws;
-    ws.onmessage = (ev) => {
-      let s = typeof ev.data === 'string' ? ev.data : String(ev.data);
+    ws.onmessage = async (ev) => {
+      let s;
+      if (typeof ev.data === 'string') {
+        s = ev.data;
+      } else if (ev.data instanceof Blob) {
+        s = await ev.data.text();
+      } else if (ev.data instanceof ArrayBuffer) {
+        s = new TextDecoder().decode(ev.data);
+      } else {
+        s = String(ev.data);
+      }
       term.write(s);
     };
     ws.onclose = () => term.writeln('\r\n[session closed]\r\n');
+    ws.onopen = () => {
+      // Send initial terminal size
+      try {
+        const { cols, rows } = term;
+        ws.send(JSON.stringify({ type: 'resize', cols, rows }));
+      } catch {}
+    };
     term.onData(data => ws.readyState === 1 && ws.send(data));
+    // Sync terminal size changes to PTY
+    term.onResize(({ cols, rows }) => {
+      if (ws.readyState === 1) {
+        try { ws.send(JSON.stringify({ type: 'resize', cols, rows })); } catch {}
+      }
+    });
     return () => { try { ws.close(); } catch {}; window.removeEventListener('resize', onResize); term.dispose(); };
   }, [repoPath]);
 
