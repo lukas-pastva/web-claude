@@ -3,7 +3,8 @@
     "allow": [
       "Bash(tree:*)",
       "Bash(git ls-tree:*)",
-      "Bash(cat:*)"
+      "Bash(cat:*)",
+      "Bash(claude:*)"
     ]
   }
 }

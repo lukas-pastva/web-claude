@@ -243,8 +243,8 @@
       }
 
       .btn-success { background: var(--success-subtle); color: var(--success); }
-      .btn-ghost { background: transparent; color: var(--text); }
-      .btn-ghost:hover { background: var(--bg-hover); color: var(--text); }
+      .btn-ghost, button.btn-ghost { background: transparent !important; color: var(--text); border: 1px solid var(--border); }
+      .btn-ghost:hover, button.btn-ghost:hover { background: var(--bg-hover) !important; color: var(--text); }
 
       .btn-copied { background: var(--success-subtle) !important; color: var(--success) !important; }
 
