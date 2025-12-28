@@ -569,6 +569,7 @@ export default function App() {
   const [loadingRepos, setLoadingRepos] = useState(false);
   const routeRef = useRef({});
   const [pendingRepoId, setPendingRepoId] = useState("");
+  const openingFromUrlRef = useRef(false);
 
   const handleGoHome = () => {
     setPhase('repos');
@@ -656,6 +657,11 @@ export default function App() {
       const prov = route.params?.provider;
       const key = route.params?.key;
       const repoId = route.params?.repo;
+      // Mark that we're opening from URL to prevent the [current] effect from closing the repo
+      const willOpenFromUrl = prov && key && (repoId || pendingRepoId);
+      if (willOpenFromUrl) {
+        openingFromUrlRef.current = true;
+      }
       if (prov && key) setCurrent(`${prov}:${key}`);
       else {
         const gh = Object.keys(r.data.github || {})[0];
@@ -664,7 +670,7 @@ export default function App() {
         if (first) setCurrent(first);
       }
       // If route includes a repo, open it after providers load
-      if (prov && key && (repoId || pendingRepoId)) {
+      if (willOpenFromUrl) {
         const want = repoId || pendingRepoId;
         const group = r.data[prov]?.[key] || [];
         const match = group.find(item => (item.full_name || item.path_with_namespace || item.name) === want);
@@ -672,6 +678,8 @@ export default function App() {
           await openRepo(match, prov, key); // pass explicit to avoid race with current
           setPendingRepoId('');
         }
+        // Reset after a tick to allow effects to run
+        setTimeout(() => { openingFromUrlRef.current = false; }, 0);
       }
     } finally {
       setLoadingRepos(false);
@@ -699,6 +707,8 @@ export default function App() {
 
   // If user switches group tabs while a repo is open, go back to the group list
   useEffect(() => {
+    // Skip if we're opening from URL (to prevent closing the repo immediately after opening)
+    if (openingFromUrlRef.current) return;
     if (currentRepo) {
       setCurrentRepo(null);
       setMeta({ repoPath: '' });
