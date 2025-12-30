@@ -325,7 +325,10 @@ app.post("/api/git/commitPush", async (req, res) => {
     if (!origin) throw new Error("No origin remote configured");
     const url = injectTokenIntoUrl(origin.refs.push || origin.refs.fetch);
     await git.push(url, undefined, ["--follow-tags"]);
-    res.json({ ok: true, commit });
+    // Get the actual latest commit hash after push (more reliable than commit result)
+    const logResult = await git.log({ maxCount: 1 });
+    const latestHash = logResult.latest?.hash || commit?.commit || '';
+    res.json({ ok: true, commit: { ...commit, commit: latestHash } });
   } catch (err) {
     res.status(500).json({ error: err.message });
   }
