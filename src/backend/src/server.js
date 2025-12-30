@@ -261,10 +261,19 @@ app.get("/api/git/branches", async (req, res) => {
   try {
     const repoPath = req.query.repoPath;
     const git = simpleGit(repoPath);
-    const branches = await git.branchLocal();
-    res.json({ ok: true, current: branches.current, all: branches.all });
+    // Fetch latest remote refs
+    try { await git.fetch(["--prune"]); } catch {}
+    // Get all branches (local + remote)
+    const branches = await git.branch(["-a"]);
+    // Filter and clean up remote branch names (remove "remotes/origin/" prefix)
+    const remoteBranches = branches.all
+      .filter(b => b.startsWith("remotes/origin/") && !b.includes("->"))
+      .map(b => b.replace("remotes/origin/", ""));
+    // Merge local and remote, dedupe
+    const allBranches = [...new Set([...branches.all.filter(b => !b.startsWith("remotes/")), ...remoteBranches])];
+    res.json({ ok: true, current: branches.current, all: allBranches });
   } catch (err) {
-    if (DEBUG) console.error("diff error:", formatErr(err));
+    if (DEBUG) console.error("branches error:", formatErr(err));
     res.status(500).json({ error: err.message });
   }
 });
