@@ -1,6 +1,7 @@
 import React, { useEffect, useRef, useState } from 'react';
 import { Terminal } from 'xterm';
 import { FitAddon } from 'xterm-addon-fit';
+import { WebLinksAddon } from 'xterm-addon-web-links';
 import 'xterm/css/xterm.css';
 
 export default function ClaudeTerminal({ repoPath }) {
@@ -82,6 +83,11 @@ export default function ClaudeTerminal({ repoPath }) {
     const fit = new FitAddon();
     fitRef.current = fit;
     term.loadAddon(fit);
+    // Make URLs clickable - opens in new tab
+    const webLinks = new WebLinksAddon((event, uri) => {
+      window.open(uri, '_blank', 'noopener,noreferrer');
+    });
+    term.loadAddon(webLinks);
     termRef.current = term;
     term.open(ref.current);
     // Fit to container after mount
