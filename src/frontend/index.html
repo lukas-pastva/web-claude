@@ -449,6 +449,146 @@
       .badge.green { background: var(--success-subtle); color: var(--success); }
       .badge.red { background: var(--danger-subtle); color: var(--danger); }
       .badge.gray { background: var(--bg-hover); color: var(--text-secondary); }
+
+      /* Branch Dropdown */
+      .branch-dropdown-container { position: relative; }
+      .btn-branch {
+        background: var(--bg-hover) !important;
+        color: var(--text) !important;
+        border: 1px solid var(--border);
+        min-width: 120px;
+      }
+      .btn-branch:hover:not(:disabled) { background: var(--border) !important; }
+      .branch-icon { font-family: system-ui; }
+      .dropdown-arrow { font-size: 10px; margin-left: 4px; opacity: 0.6; }
+
+      .branch-dropdown {
+        position: absolute;
+        top: calc(100% + 4px);
+        left: 0;
+        min-width: 220px;
+        background: var(--bg-card);
+        border: 1px solid var(--border);
+        border-radius: var(--radius);
+        box-shadow: var(--shadow);
+        z-index: 200;
+        overflow: hidden;
+      }
+
+      .branch-dropdown-header {
+        padding: 10px 14px;
+        font-size: 12px;
+        font-weight: 600;
+        color: var(--text-muted);
+        text-transform: uppercase;
+        letter-spacing: 0.5px;
+        border-bottom: 1px solid var(--border);
+      }
+
+      .branch-list {
+        max-height: 240px;
+        overflow-y: auto;
+      }
+
+      .branch-item {
+        padding: 10px 14px;
+        display: flex;
+        align-items: center;
+        gap: 8px;
+        cursor: pointer;
+        transition: background var(--transition);
+        font-size: 14px;
+      }
+      .branch-item:hover { background: var(--bg-hover); }
+      .branch-item.active {
+        background: var(--primary-subtle);
+        color: var(--primary);
+      }
+      .branch-item .check-icon { color: var(--primary); font-weight: bold; }
+      .branch-item .branch-name {
+        flex: 1;
+        overflow: hidden;
+        text-overflow: ellipsis;
+        white-space: nowrap;
+      }
+
+      .branch-dropdown-footer {
+        border-top: 1px solid var(--border);
+        padding: 8px;
+      }
+      .btn-new-branch {
+        width: 100%;
+        background: transparent !important;
+        color: var(--primary) !important;
+        justify-content: center;
+      }
+      .btn-new-branch:hover:not(:disabled) { background: var(--primary-subtle) !important; }
+
+      /* Modal */
+      .modal-overlay {
+        position: fixed;
+        top: 0; left: 0; right: 0; bottom: 0;
+        background: rgba(0, 0, 0, 0.6);
+        backdrop-filter: blur(4px);
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        z-index: 1000;
+        padding: 16px;
+      }
+
+      .modal {
+        background: var(--bg-card);
+        border: 1px solid var(--border);
+        border-radius: var(--radius);
+        box-shadow: var(--shadow);
+        width: 100%;
+        max-width: 400px;
+        overflow: hidden;
+      }
+
+      .modal-header {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        padding: 16px;
+        border-bottom: 1px solid var(--border);
+      }
+      .modal-header h3 {
+        font-size: 16px;
+        font-weight: 600;
+        color: var(--text);
+      }
+      .modal-close {
+        width: 32px !important;
+        height: 32px !important;
+        padding: 0 !important;
+        background: transparent !important;
+        color: var(--text-muted) !important;
+        border: none !important;
+        font-size: 16px;
+      }
+      .modal-close:hover { color: var(--text) !important; background: var(--bg-hover) !important; }
+
+      .modal-body { padding: 16px; }
+      .form-group { margin-bottom: 16px; }
+      .form-group:last-child { margin-bottom: 0; }
+      .form-group label {
+        display: block;
+        font-size: 13px;
+        font-weight: 500;
+        color: var(--text-secondary);
+        margin-bottom: 6px;
+      }
+
+      .modal-footer {
+        display: flex;
+        gap: 8px;
+        justify-content: flex-end;
+        padding: 16px;
+        border-top: 1px solid var(--border);
+        background: var(--bg-elevated);
+      }
     </style>
   </head>
   <body>

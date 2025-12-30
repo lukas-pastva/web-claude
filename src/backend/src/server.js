@@ -280,6 +280,22 @@ app.post("/api/git/checkout", async (req, res) => {
   }
 });
 
+app.post("/api/git/createBranch", async (req, res) => {
+  try {
+    const { repoPath, branchName, sourceBranch } = req.body;
+    if (!repoPath) return res.status(400).json({ error: "repoPath is required" });
+    if (!branchName) return res.status(400).json({ error: "branchName is required" });
+    const git = simpleGit(repoPath);
+    const source = sourceBranch || "main";
+    // Create new branch from source and checkout to it
+    await git.checkout(["-b", branchName, source]);
+    res.json({ ok: true, branch: branchName });
+  } catch (err) {
+    if (DEBUG) console.error("createBranch error:", formatErr(err));
+    res.status(500).json({ error: err.message });
+  }
+});
+
 app.post("/api/git/commitPush", async (req, res) => {
   try {
     const { repoPath, message } = req.body;

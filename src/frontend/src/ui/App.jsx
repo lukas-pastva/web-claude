@@ -100,6 +100,16 @@ function RepoActions({ repo, meta, setMeta }) {
   const prevChangedCountRef = useRef(0);
   const lastVibeAtRef = useRef(0);
 
+  // Branch management state
+  const [branches, setBranches] = useState({ current: '', all: [] });
+  const [showBranchDropdown, setShowBranchDropdown] = useState(false);
+  const [showNewBranchModal, setShowNewBranchModal] = useState(false);
+  const [newBranchName, setNewBranchName] = useState('');
+  const [newBranchSource, setNewBranchSource] = useState('main');
+  const [checkingOut, setCheckingOut] = useState(false);
+  const [creatingBranch, setCreatingBranch] = useState(false);
+  const branchDropdownRef = useRef(null);
+
   const refreshLog = async () => {
     const r = await axios.get("/api/git/log", { params: { repoPath: meta.repoPath }});
     setLog(r.data.commits || []);
@@ -111,11 +121,85 @@ function RepoActions({ repo, meta, setMeta }) {
     setPullInfo(p => ({ ...p, upToDate: behind === 0, behind }));
   };
 
+  const refreshBranches = async () => {
+    if (!meta.repoPath) return;
+    try {
+      const r = await axios.get("/api/git/branches", { params: { repoPath: meta.repoPath }});
+      setBranches({ current: r.data.current || '', all: r.data.all || [] });
+      // Update source branch default to current if not set or not in list
+      if (!newBranchSource || !r.data.all?.includes(newBranchSource)) {
+        setNewBranchSource(r.data.current || 'main');
+      }
+    } catch (e) {
+      console.error("Failed to fetch branches:", e);
+    }
+  };
+
+  const doCheckout = async (branch) => {
+    if (branch === branches.current) {
+      setShowBranchDropdown(false);
+      return;
+    }
+    try {
+      setCheckingOut(true);
+      await axios.post("/api/git/checkout", { repoPath: meta.repoPath, branch });
+      await refreshBranches();
+      await refreshDiff();
+      await refreshLog();
+      setShowBranchDropdown(false);
+      toast && toast(`Switched to ${branch}`);
+    } catch (e) {
+      const msg = e?.response?.data?.error || e?.message || "Checkout failed";
+      toast && toast(`Checkout failed: ${msg}`);
+    } finally {
+      setCheckingOut(false);
+    }
+  };
+
+  const doCreateBranch = async () => {
+    if (!newBranchName.trim()) {
+      toast && toast("Branch name is required");
+      return;
+    }
+    try {
+      setCreatingBranch(true);
+      await axios.post("/api/git/createBranch", {
+        repoPath: meta.repoPath,
+        branchName: newBranchName.trim(),
+        sourceBranch: newBranchSource || 'main'
+      });
+      await refreshBranches();
+      await refreshDiff();
+      setShowNewBranchModal(false);
+      setNewBranchName('');
+      toast && toast(`Created and switched to ${newBranchName.trim()}`);
+    } catch (e) {
+      const msg = e?.response?.data?.error || e?.message || "Failed to create branch";
+      toast && toast(`Create branch failed: ${msg}`);
+    } finally {
+      setCreatingBranch(false);
+    }
+  };
+
+  // Close dropdown when clicking outside
+  useEffect(() => {
+    const handleClickOutside = (e) => {
+      if (branchDropdownRef.current && !branchDropdownRef.current.contains(e.target)) {
+        setShowBranchDropdown(false);
+      }
+    };
+    if (showBranchDropdown) {
+      document.addEventListener('mousedown', handleClickOutside);
+      return () => document.removeEventListener('mousedown', handleClickOutside);
+    }
+  }, [showBranchDropdown]);
+
   useEffect(() => {
     if (meta.repoPath) {
       refreshLog();
       refreshStatus();
       refreshDiff();
+      refreshBranches();
     }
   }, [meta.repoPath]);
 
@@ -435,6 +519,45 @@ function RepoActions({ repo, meta, setMeta }) {
             )}
           </div>
           <div className="card-actions">
+            {/* Branch dropdown */}
+            <div className="branch-dropdown-container" ref={branchDropdownRef} style={{position:'relative'}}>
+              <button
+                className={`btn btn-branch ${checkingOut ? 'btn-loading' : ''}`}
+                onClick={() => setShowBranchDropdown(!showBranchDropdown)}
+                disabled={checkingOut}
+              >
+                {checkingOut ? (
+                  <><span className="spinner" /></>
+                ) : (
+                  <><span className="icon branch-icon">⎇</span> {branches.current || 'main'} <span className="dropdown-arrow">▼</span></>
+                )}
+              </button>
+              {showBranchDropdown && (
+                <div className="branch-dropdown">
+                  <div className="branch-dropdown-header">Branches</div>
+                  <div className="branch-list">
+                    {branches.all.map((b, idx) => (
+                      <div
+                        key={idx}
+                        className={`branch-item ${b === branches.current ? 'active' : ''}`}
+                        onClick={() => doCheckout(b)}
+                      >
+                        {b === branches.current && <span className="check-icon">✓</span>}
+                        <span className="branch-name">{b}</span>
+                      </div>
+                    ))}
+                  </div>
+                  <div className="branch-dropdown-footer">
+                    <button
+                      className="btn btn-new-branch"
+                      onClick={() => { setShowBranchDropdown(false); setShowNewBranchModal(true); }}
+                    >
+                      <span className="icon">+</span> New Branch
+                    </button>
+                  </div>
+                </div>
+              )}
+            </div>
             <button
               className={`btn ${pulling ? 'btn-loading' : pullInfo.upToDate ? 'btn-success' : 'btn-secondary'}`}
               onClick={doPull}
@@ -554,6 +677,52 @@ function RepoActions({ repo, meta, setMeta }) {
       <div className="col cli-col">
         <ClaudeTerminal repoPath={meta.repoPath} />
       </div>
+
+      {/* New Branch Modal */}
+      {showNewBranchModal && (
+        <div className="modal-overlay" onClick={() => setShowNewBranchModal(false)}>
+          <div className="modal" onClick={(e) => e.stopPropagation()}>
+            <div className="modal-header">
+              <h3>Create New Branch</h3>
+              <button className="modal-close" onClick={() => setShowNewBranchModal(false)}>✕</button>
+            </div>
+            <div className="modal-body">
+              <div className="form-group">
+                <label>Branch name</label>
+                <input
+                  type="text"
+                  value={newBranchName}
+                  onChange={(e) => setNewBranchName(e.target.value)}
+                  placeholder="feature/my-branch"
+                  autoFocus
+                  onKeyDown={(e) => { if (e.key === 'Enter' && !creatingBranch) doCreateBranch(); }}
+                />
+              </div>
+              <div className="form-group">
+                <label>Create from</label>
+                <select
+                  value={newBranchSource}
+                  onChange={(e) => setNewBranchSource(e.target.value)}
+                >
+                  {branches.all.map((b, idx) => (
+                    <option key={idx} value={b}>{b}</option>
+                  ))}
+                </select>
+              </div>
+            </div>
+            <div className="modal-footer">
+              <button className="btn btn-secondary" onClick={() => setShowNewBranchModal(false)}>Cancel</button>
+              <button
+                className={`btn btn-primary ${creatingBranch ? 'btn-loading' : ''}`}
+                onClick={doCreateBranch}
+                disabled={creatingBranch || !newBranchName.trim()}
+              >
+                {creatingBranch ? <><span className="spinner" /> Creating...</> : 'Create Branch'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   )
 }
