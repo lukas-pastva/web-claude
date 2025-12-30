@@ -399,10 +399,14 @@
       }
 
       /* d2h overrides */
-      .d2h-wrapper { font-size: 12px; border-radius: var(--radius-sm); overflow: hidden; }
+      .d2h-wrapper { font-size: 12px; border-radius: var(--radius-sm); overflow-x: auto; }
       .d2h-file-header { background: var(--bg-hover) !important; }
       .d2h-code-linenumber { background: var(--bg) !important; }
       .d2h-code-line { background: var(--bg-card) !important; }
+      .d2h-file-wrapper { overflow-x: auto; }
+      .d2h-diff-table { min-width: 100%; }
+      .d2h-code-line-ctn { white-space: pre; overflow-x: visible; }
+      .diff-content { overflow-x: auto; }
 
       /* Mobile Responsive */
       @media (max-width: 768px) {
