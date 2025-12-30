@@ -500,34 +500,6 @@ app.post("/api/cli/patch", async (req, res) => {
   }
 });
 
-// ---- Git status (working tree) ----
-app.get("/api/git/status", async (req, res) => {
-  try {
-    const repoPath = req.query.repoPath;
-    if (!repoPath) return res.status(400).json({ error: "repoPath is required" });
-    const git = simpleGit(repoPath);
-    try { await git.fetch(); } catch {}
-    const st = await git.status();
-    res.set("Cache-Control", "no-store");
-    res.json({ ok: true, status: st });
-  } catch (err) {
-    res.status(500).json({ error: err.message });
-  }
-});
-
-// ---- Git diff (working tree) ----
-app.get("/api/git/diff", async (req, res) => {
-  try {
-    const repoPath = req.query.repoPath;
-    if (!repoPath) return res.status(400).json({ error: "repoPath is required" });
-    const git = simpleGit(repoPath);
-    const diff = await git.raw(["diff"]);
-    res.json({ ok: true, diff });
-  } catch (err) {
-    res.status(500).json({ error: err.message });
-  }
-});
-
 // ---- AI Patch endpoint removed - use Claude CLI directly via terminal ----
 
 app.post("/api/git/apply-commit-push", async (req, res) => {
