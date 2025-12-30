@@ -918,6 +918,15 @@ export default function App() {
     updateHashFromState();
   }, [phase, current, currentRepo]);
 
+  // Update browser tab title with current repo name
+  useEffect(() => {
+    if (currentRepo?.name) {
+      document.title = `${currentRepo.name} - web-claude`;
+    } else {
+      document.title = 'web-claude';
+    }
+  }, [currentRepo]);
+
   return (
     <div>
       
