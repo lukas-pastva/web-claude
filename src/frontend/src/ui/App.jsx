@@ -5,7 +5,7 @@ import FileTree from "./FileTree.jsx";
 import DiffPretty from "./DiffPretty.jsx";
 import { ToastProvider, useToast } from "./ToastContext.jsx";
 
-function GroupTabs({ providers, current, setCurrent }) {
+function getProviderItems(providers) {
   const items = [];
   if (providers.github) {
     for (const key of Object.keys(providers.github)) items.push({ provider: "github", key });
@@ -13,6 +13,13 @@ function GroupTabs({ providers, current, setCurrent }) {
   if (providers.gitlab) {
     for (const key of Object.keys(providers.gitlab)) items.push({ provider: "gitlab", key });
   }
+  return items;
+}
+
+function GroupTabs({ providers, current, setCurrent }) {
+  const items = getProviderItems(providers);
+  // Don't render tabs if there's only one group
+  if (items.length <= 1) return null;
   return (
     <div className="tabs">
       {items.map((it, idx) => {
@@ -931,8 +938,23 @@ export default function App() {
     <div>
       
       <header>
-        <div style={{cursor:'pointer'}} onClick={handleGoHome} title="Home (repos)"><strong>web-claude</strong></div>
-        
+        <div style={{cursor:'pointer', display:'flex', alignItems:'center', gap:8}} onClick={handleGoHome} title="Home (repos)">
+          <strong>web-claude</strong>
+          {(() => {
+            const items = getProviderItems(providers);
+            if (items.length === 1) {
+              const it = items[0];
+              const count = (providers[it.provider]?.[it.key] || []).length;
+              return (
+                <span className="muted" style={{fontSize:'0.9em'}}>
+                  / {it.provider} / {it.key} <span className="tag">{count}</span>
+                </span>
+              );
+            }
+            return null;
+          })()}
+        </div>
+
         <div style={{marginLeft:'auto', display:'flex', gap:8, alignItems:'center'}}>
           <button className="secondary icon" onClick={cycleTheme} title={`Theme: ${themeMode}`}>{themeIcon}</button>
         </div>

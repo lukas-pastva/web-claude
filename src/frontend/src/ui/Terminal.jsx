@@ -246,6 +246,17 @@ export default function ClaudeTerminal({ repoPath }) {
               onClick={pasteFromClipboard}
               title="Paste clipboard into terminal"
             >📥</button>
+            <button
+              className="secondary icon"
+              style={{ marginLeft: 6 }}
+              onClick={() => {
+                const t = termRef.current;
+                if (t && typeof t.scrollToBottom === 'function') {
+                  t.scrollToBottom();
+                }
+              }}
+              title="Scroll to bottom"
+            >⬇</button>
           </span>
         </div>
         <div>
