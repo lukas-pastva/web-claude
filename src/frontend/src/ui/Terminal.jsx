@@ -12,6 +12,10 @@ export default function ClaudeTerminal({ repoPath }) {
   const fitRef = useRef(null);
   const [isFullscreen, setIsFullscreen] = useState(false);
   const [manualFullscreen, setManualFullscreen] = useState(false);
+  // Track if component is mounted to prevent state updates after unmount
+  const isMountedRef = useRef(true);
+  // Track WebSocket connection state to prevent orphaned connections
+  const wsStateRef = useRef('closed'); // 'closed' | 'connecting' | 'open'
 
   const copySelectionUnwrapped = async () => {
     try {
@@ -70,6 +74,9 @@ export default function ClaudeTerminal({ repoPath }) {
   };
 
   useEffect(() => {
+    // Mark component as mounted
+    isMountedRef.current = true;
+
     // Smaller default font on mobile phones; tablet a bit larger
     const baseFontSize = (() => {
       try {
@@ -96,10 +103,16 @@ export default function ClaudeTerminal({ repoPath }) {
     const onResize = () => { try { fitRef.current && fitRef.current.fit(); } catch {} };
     window.addEventListener('resize', onResize);
     term.writeln('\x1b[1;34mweb-claude\x1b[0m — attaching to Claude CLI...');
+
+    // Create WebSocket with state tracking
     const proto = (location.protocol === 'https:') ? 'wss' : 'ws';
+    wsStateRef.current = 'connecting';
     const ws = new WebSocket(`${proto}://${location.host}/ws/terminal?repoPath=${encodeURIComponent(repoPath||'')}`);
     wsRef.current = ws;
+
     ws.onmessage = async (ev) => {
+      // Skip if component unmounted
+      if (!isMountedRef.current) return;
       let s;
       if (typeof ev.data === 'string') {
         s = ev.data;
@@ -112,22 +125,63 @@ export default function ClaudeTerminal({ repoPath }) {
       }
       term.write(s);
     };
-    ws.onclose = () => term.writeln('\r\n[session closed]\r\n');
+
+    ws.onclose = () => {
+      wsStateRef.current = 'closed';
+      // Only write to terminal if still mounted
+      if (isMountedRef.current) {
+        term.writeln('\r\n[session closed]\r\n');
+      }
+    };
+
+    ws.onerror = (err) => {
+      wsStateRef.current = 'closed';
+      console.error('WebSocket error:', err);
+    };
+
     ws.onopen = () => {
+      wsStateRef.current = 'open';
+      // Skip if component unmounted during connection
+      if (!isMountedRef.current) {
+        ws.close();
+        return;
+      }
       // Send initial terminal size
       try {
         const { cols, rows } = term;
         ws.send(JSON.stringify({ type: 'resize', cols, rows }));
       } catch {}
     };
-    term.onData(data => ws.readyState === 1 && ws.send(data));
+
+    term.onData(data => {
+      if (ws.readyState === WebSocket.OPEN) {
+        ws.send(data);
+      }
+    });
+
     // Sync terminal size changes to PTY
     term.onResize(({ cols, rows }) => {
-      if (ws.readyState === 1) {
+      if (ws.readyState === WebSocket.OPEN) {
         try { ws.send(JSON.stringify({ type: 'resize', cols, rows })); } catch {}
       }
     });
-    return () => { try { ws.close(); } catch {}; window.removeEventListener('resize', onResize); term.dispose(); };
+
+    return () => {
+      // Mark component as unmounted first
+      isMountedRef.current = false;
+
+      // Close WebSocket regardless of state
+      try {
+        if (ws.readyState === WebSocket.CONNECTING || ws.readyState === WebSocket.OPEN) {
+          ws.close();
+        }
+      } catch {}
+      wsStateRef.current = 'closed';
+      wsRef.current = null;
+
+      window.removeEventListener('resize', onResize);
+      term.dispose();
+    };
   }, [repoPath]);
 
   // Track fullscreen state changes and refit terminal

@@ -1,9 +1,50 @@
-import React, { useEffect, useMemo, useRef, useState } from "react";
+import React, { useEffect, useMemo, useRef, useState, useCallback } from "react";
 import axios from "axios";
 import ClaudeTerminal from "./Terminal.jsx";
 import FileTree from "./FileTree.jsx";
 import DiffPretty from "./DiffPretty.jsx";
 import { ToastProvider, useToast } from "./ToastContext.jsx";
+
+// Helper to create cancellable axios requests
+function createAbortController() {
+  return new AbortController();
+}
+
+// Parse changed files from unified diff - extracted for caching
+function parseChangedFiles(patch) {
+  try {
+    const diff = patch || '';
+    const lines = diff.split(/\n/);
+    const out = [];
+    let i = 0;
+    while (i < lines.length) {
+      const line = lines[i];
+      const m = /^diff --git a\/(.+?) b\/(.+)$/.exec(line);
+      if (m) {
+        let from = m[1];
+        let to = m[2];
+        let status = 'modified';
+        let j = i + 1;
+        while (j < lines.length && !lines[j].startsWith('diff --git ')) {
+          const l = lines[j];
+          if (/^new file mode /.test(l)) status = 'added';
+          if (/^deleted file mode /.test(l)) status = 'deleted';
+          const rnTo = /^rename to (.+)$/.exec(l);
+          const rnFrom = /^rename from (.+)$/.exec(l);
+          if (rnTo || rnFrom) status = 'renamed';
+          if (rnTo) to = rnTo[1];
+          j++;
+        }
+        const path = status === 'deleted' ? from : to;
+        out.push({ path, status });
+        i = j;
+        continue;
+      }
+      i++;
+    }
+    return out;
+  } catch { return []; }
+}
 
 function getProviderItems(providers) {
   const items = [];
@@ -117,28 +158,62 @@ function RepoActions({ repo, meta, setMeta }) {
   const [creatingBranch, setCreatingBranch] = useState(false);
   const branchDropdownRef = useRef(null);
 
-  const refreshLog = async () => {
-    const r = await axios.get("/api/git/log", { params: { repoPath: meta.repoPath }});
+  // Abort controllers for cancelling pending requests
+  const abortControllersRef = useRef({});
+  // Track if a polling request is in flight to prevent stacking
+  const diffPendingRef = useRef(false);
+  const statusPendingRef = useRef(false);
+  // Cache for parsed diff to avoid re-parsing
+  const lastPatchRef = useRef('');
+
+  // Cleanup abort controllers on unmount
+  useEffect(() => {
+    return () => {
+      Object.values(abortControllersRef.current).forEach(ctrl => {
+        try { ctrl.abort(); } catch {}
+      });
+    };
+  }, []);
+
+  const refreshLog = async (signal) => {
+    const r = await axios.get("/api/git/log", {
+      params: { repoPath: meta.repoPath },
+      signal
+    });
     setLog(r.data.commits || []);
   };
 
-  const refreshStatus = async () => {
-    const r = await axios.get("/api/git/status", { params: { repoPath: meta.repoPath }});
-    const behind = Number(r.data.status?.behind || 0);
-    setPullInfo(p => ({ ...p, upToDate: behind === 0, behind }));
+  const refreshStatus = async (signal) => {
+    if (statusPendingRef.current) return; // Skip if already fetching
+    statusPendingRef.current = true;
+    try {
+      const r = await axios.get("/api/git/status", {
+        params: { repoPath: meta.repoPath },
+        signal
+      });
+      const behind = Number(r.data.status?.behind || 0);
+      setPullInfo(p => ({ ...p, upToDate: behind === 0, behind }));
+    } finally {
+      statusPendingRef.current = false;
+    }
   };
 
-  const refreshBranches = async () => {
+  const refreshBranches = async (signal) => {
     if (!meta.repoPath) return;
     try {
-      const r = await axios.get("/api/git/branches", { params: { repoPath: meta.repoPath }});
+      const r = await axios.get("/api/git/branches", {
+        params: { repoPath: meta.repoPath },
+        signal
+      });
       setBranches({ current: r.data.current || '', all: r.data.all || [] });
       // Update source branch default to current if not set or not in list
       if (!newBranchSource || !r.data.all?.includes(newBranchSource)) {
         setNewBranchSource(r.data.current || 'main');
       }
     } catch (e) {
-      console.error("Failed to fetch branches:", e);
+      if (e.name !== 'CanceledError' && e.name !== 'AbortError') {
+        console.error("Failed to fetch branches:", e);
+      }
     }
   };
 
@@ -201,13 +276,24 @@ function RepoActions({ repo, meta, setMeta }) {
     }
   }, [showBranchDropdown]);
 
+  // Initial data load when repo changes - with abort controller
   useEffect(() => {
-    if (meta.repoPath) {
-      refreshLog();
-      refreshStatus();
-      refreshDiff();
-      refreshBranches();
-    }
+    if (!meta.repoPath) return;
+    const controller = createAbortController();
+    abortControllersRef.current.init = controller;
+
+    // Load all data with the abort signal
+    Promise.all([
+      refreshLog(controller.signal).catch(() => {}),
+      refreshStatus(controller.signal).catch(() => {}),
+      refreshDiff(controller.signal).catch(() => {}),
+      refreshBranches(controller.signal).catch(() => {})
+    ]);
+
+    return () => {
+      controller.abort();
+      delete abortControllersRef.current.init;
+    };
   }, [meta.repoPath]);
 
   // Terminal is always visible
@@ -238,54 +324,51 @@ function RepoActions({ repo, meta, setMeta }) {
     }
   };
 
-  const refreshDiff = async () => {
+  const refreshDiff = async (signal) => {
     if (!meta.repoPath) return;
-    const r = await axios.get("/api/git/diff", { params: { repoPath: meta.repoPath } });
-    setPatch(r.data.diff || "");
+    if (diffPendingRef.current) return; // Skip if already fetching
+    diffPendingRef.current = true;
+    try {
+      const r = await axios.get("/api/git/diff", {
+        params: { repoPath: meta.repoPath },
+        signal
+      });
+      const newDiff = r.data.diff || "";
+      // Only update if diff actually changed (prevents unnecessary re-renders and re-parsing)
+      setPatch(prev => prev === newDiff ? prev : newDiff);
+    } finally {
+      diffPendingRef.current = false;
+    }
   };
 
-  // Parse changed files from unified diff
-  useEffect(() => {
-    try {
-      const diff = patch || '';
-      const lines = diff.split(/\n/);
-      const out = [];
-      let i = 0;
-      while (i < lines.length) {
-        const line = lines[i];
-        const m = /^diff --git a\/(.+?) b\/(.+)$/.exec(line);
-        if (m) {
-          let from = m[1];
-          let to = m[2];
-          let status = 'modified';
-          let j = i + 1;
-          while (j < lines.length && !lines[j].startsWith('diff --git ')) {
-            const l = lines[j];
-            if (/^new file mode /.test(l)) status = 'added';
-            if (/^deleted file mode /.test(l)) status = 'deleted';
-            const rnTo = /^rename to (.+)$/.exec(l);
-            const rnFrom = /^rename from (.+)$/.exec(l);
-            if (rnTo || rnFrom) status = 'renamed';
-            if (rnTo) to = rnTo[1];
-            j++;
-          }
-          const path = status === 'deleted' ? from : to;
-          out.push({ path, status });
-          i = j;
-          continue;
-        }
-        i++;
-      }
-      setChangedFiles(out);
-      setShowAllChanged(false);
-    } catch { setChangedFiles([]); setShowAllChanged(false); }
-  }, [patch]);
+  // Parse changed files from unified diff - use useMemo for caching
+  const parsedChangedFiles = useMemo(() => parseChangedFiles(patch), [patch]);
 
-  // Auto refresh diff every 5 seconds
+  // Update changed files only when parsed result changes
+  useEffect(() => {
+    setChangedFiles(parsedChangedFiles);
+    setShowAllChanged(false);
+  }, [parsedChangedFiles]);
+
+  // Auto refresh diff every 5 seconds with proper cleanup
   useEffect(() => {
     if (!meta.repoPath) return;
-    const id = setInterval(() => { refreshDiff().catch(()=>{}); }, 5000);
-    return () => clearInterval(id);
+    const controller = createAbortController();
+    abortControllersRef.current.diff = controller;
+
+    const id = setInterval(() => {
+      refreshDiff(controller.signal).catch(e => {
+        if (e.name !== 'CanceledError' && e.name !== 'AbortError') {
+          console.error('Diff refresh failed:', e);
+        }
+      });
+    }, 5000);
+
+    return () => {
+      clearInterval(id);
+      controller.abort();
+      delete abortControllersRef.current.diff;
+    };
   }, [meta.repoPath]);
 
   // Mobile haptic: vibrate when changes appear/increase
@@ -312,11 +395,25 @@ function RepoActions({ repo, meta, setMeta }) {
     } catch {}
   }, [changedFiles]);
 
-  // Periodically refresh upstream status to enable/disable pull button
+  // Periodically refresh upstream status with proper cleanup
   useEffect(() => {
     if (!meta.repoPath) return;
-    const id = setInterval(() => { refreshStatus().catch(()=>{}); }, 5000); // 5s
-    return () => clearInterval(id);
+    const controller = createAbortController();
+    abortControllersRef.current.status = controller;
+
+    const id = setInterval(() => {
+      refreshStatus(controller.signal).catch(e => {
+        if (e.name !== 'CanceledError' && e.name !== 'AbortError') {
+          console.error('Status refresh failed:', e);
+        }
+      });
+    }, 5000);
+
+    return () => {
+      clearInterval(id);
+      controller.abort();
+      delete abortControllersRef.current.status;
+    };
   }, [meta.repoPath]);
 
   const doApplyCommitPush = async () => {
