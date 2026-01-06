@@ -579,31 +579,46 @@ function RepoActions({ repo, meta, setMeta }) {
   }, [manualDiffFullscreen]);
 
   const copyHash = async (hash) => {
-    try {
-      await navigator.clipboard.writeText(hash);
-      // Visual feedback on the button
+    const onSuccess = () => {
       if (copiedTimerRef.current) clearTimeout(copiedTimerRef.current);
       setCopied(true);
       copiedTimerRef.current = setTimeout(() => setCopied(false), 1500);
-      // Toast feedback (also works across the app)
       toast && toast("Commit hash copied ✅");
-    } catch (e) {
+    };
+    // Try modern clipboard API first
+    if (navigator.clipboard && navigator.clipboard.writeText) {
       try {
-        const ta = document.createElement('textarea');
-        ta.value = hash;
-        ta.style.position = 'fixed';
-        ta.style.opacity = '0';
-        document.body.appendChild(ta);
-        ta.select();
-        document.execCommand('copy');
-        document.body.removeChild(ta);
-        if (copiedTimerRef.current) clearTimeout(copiedTimerRef.current);
-        setCopied(true);
-        copiedTimerRef.current = setTimeout(() => setCopied(false), 1500);
-        toast && toast("Commit hash copied ✅");
-      } catch {
+        await navigator.clipboard.writeText(hash);
+        onSuccess();
+        return;
+      } catch {}
+    }
+    // Fallback for mobile browsers (especially iOS Safari)
+    try {
+      const ta = document.createElement('textarea');
+      ta.value = hash;
+      ta.setAttribute('readonly', ''); // Prevent keyboard on mobile
+      ta.style.position = 'absolute';
+      ta.style.left = '-9999px';
+      ta.style.top = '0';
+      ta.style.fontSize = '16px'; // Prevent iOS zoom
+      document.body.appendChild(ta);
+      // iOS Safari specific handling
+      const range = document.createRange();
+      range.selectNodeContents(ta);
+      const sel = window.getSelection();
+      sel.removeAllRanges();
+      sel.addRange(range);
+      ta.setSelectionRange(0, hash.length); // For iOS
+      const ok = document.execCommand('copy');
+      document.body.removeChild(ta);
+      if (ok) {
+        onSuccess();
+      } else {
         alert("Failed to copy commit hash");
       }
+    } catch {
+      alert("Failed to copy commit hash");
     }
   };
 
