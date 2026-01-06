@@ -295,7 +295,7 @@ export default function ClaudeTerminal({ repoPath }) {
                 onClick={(e) => {
                   e.preventDefault();
                   const ws = wsRef.current;
-                  if (ws && ws.readyState === WebSocket.OPEN) {
+                  if (ws && ws.readyState === 1) {
                     ws.send(String(n) + '\r');
                   }
                 }}
