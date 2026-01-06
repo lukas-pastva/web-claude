@@ -317,6 +317,22 @@ export default function ClaudeTerminal({ repoPath }) {
               }}
               title="Scroll to bottom"
             >⬇</button>
+            <span style={{ marginLeft: 12, borderLeft: '1px solid #444', paddingLeft: 12 }}>
+              {[1, 2, 3].map(n => (
+                <button
+                  key={n}
+                  className="secondary"
+                  style={{ marginLeft: n === 1 ? 0 : 6, minWidth: 32 }}
+                  onClick={() => {
+                    const ws = wsRef.current;
+                    if (ws && ws.readyState === WebSocket.OPEN) {
+                      ws.send(String(n) + '\r');
+                    }
+                  }}
+                  title={`Send ${n} + Enter`}
+                >{n}</button>
+              ))}
+            </span>
           </span>
         </div>
         <div>
