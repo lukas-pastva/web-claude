@@ -17,38 +17,6 @@ export default function ClaudeTerminal({ repoPath }) {
   // Track WebSocket connection state to prevent orphaned connections
   const wsStateRef = useRef('closed'); // 'closed' | 'connecting' | 'open'
 
-  const copySelectionUnwrapped = async () => {
-    try {
-      const t = termRef.current;
-      let text = '';
-      if (t && typeof t.getSelection === 'function') {
-        text = t.getSelection() || '';
-      }
-      if (!text && typeof window !== 'undefined' && window.getSelection) {
-        text = String(window.getSelection()?.toString() || '');
-      }
-      if (!text && ref.current) {
-        try {
-          const rows = ref.current.querySelectorAll('.xterm-rows > div');
-          if (rows && rows.length) {
-            text = Array.from(rows).map(r => r.textContent || '').join('\n');
-          }
-        } catch {}
-      }
-      if (!text) return;
-      // Strip ANSI escapes, CR, and join all newlines (soft wraps) without spaces
-      const ansiRe = /\x1b\[[0-9;]*[A-Za-z]/g;
-      const out = text.replace(ansiRe, '').replace(/\r/g, '').replace(/\n+/g, '');
-      if (navigator.clipboard && navigator.clipboard.writeText) {
-        await navigator.clipboard.writeText(out);
-      } else {
-        const ta = document.createElement('textarea');
-        ta.value = out; ta.style.position = 'fixed'; ta.style.left = '-1000px';
-        document.body.appendChild(ta); ta.select(); document.execCommand('copy'); document.body.removeChild(ta);
-      }
-    } catch {}
-  };
-
   const [showPasteModal, setShowPasteModal] = useState(false);
   const [pasteBuffer, setPasteBuffer] = useState("");
   const pasteFromClipboard = async () => {
@@ -272,73 +240,78 @@ export default function ClaudeTerminal({ repoPath }) {
         : {}}
     >
       <div style={{display:'flex', justifyContent:'space-between', alignItems:'center', marginBottom:8}}>
-        <div className="muted" style={{display:'flex', alignItems:'center', gap: 12}}>
-          <span style={{display:'inline-flex', alignItems:'center'}}>
-            <button
-              className="secondary"
-              onClick={() => {
-                const t = termRef.current; if (!t) return;
-                const cur = Number(t.options?.fontSize || 14);
-                t.options.fontSize = cur + 1;
-                try { fitRef.current && fitRef.current.fit(); } catch {}
-              }}
-            >A+</button>
-            <button
-              className="secondary"
-              style={{ marginLeft: 6 }}
-              onClick={() => {
-                const t = termRef.current; if (!t) return;
-                const cur = Number(t.options?.fontSize || 14);
-                const next = Math.max(10, cur - 1);
-                t.options.fontSize = next;
-                try { fitRef.current && fitRef.current.fit(); } catch {}
-              }}
-            >A-</button>
-            <button
-              className="secondary icon"
-              style={{ marginLeft: 6 }}
-              onClick={copySelectionUnwrapped}
-              title="Copy selection without line wraps"
-            >📋</button>
-            <button
-              className="secondary icon"
-              style={{ marginLeft: 6 }}
-              onClick={pasteFromClipboard}
-              title="Paste clipboard into terminal"
-            >📥</button>
-            <button
-              className="secondary icon"
-              style={{ marginLeft: 6 }}
-              onClick={() => {
-                const t = termRef.current;
-                if (t && typeof t.scrollToBottom === 'function') {
-                  t.scrollToBottom();
-                }
-              }}
-              title="Scroll to bottom"
-            >⬇</button>
-            <span style={{ marginLeft: 12, borderLeft: '1px solid #444', paddingLeft: 12 }}>
-              {[1, 2, 3].map(n => (
-                <button
-                  key={n}
-                  className="secondary"
-                  style={{ marginLeft: n === 1 ? 0 : 6, minWidth: 32 }}
-                  onClick={() => {
-                    const ws = wsRef.current;
-                    if (ws && ws.readyState === WebSocket.OPEN) {
-                      ws.send(String(n) + '\r');
-                    }
-                  }}
-                  title={`Send ${n} + Enter`}
-                >{n}</button>
-              ))}
-            </span>
+        <div className="muted" style={{display:'flex', alignItems:'center', gap: 6}}>
+          <button
+            type="button"
+            className="secondary"
+            onClick={(e) => {
+              e.preventDefault();
+              const t = termRef.current; if (!t) return;
+              const cur = Number(t.options?.fontSize || 14);
+              t.options.fontSize = cur + 1;
+              try { fitRef.current && fitRef.current.fit(); } catch {}
+            }}
+          >A+</button>
+          <button
+            type="button"
+            className="secondary"
+            onClick={(e) => {
+              e.preventDefault();
+              const t = termRef.current; if (!t) return;
+              const cur = Number(t.options?.fontSize || 14);
+              const next = Math.max(10, cur - 1);
+              t.options.fontSize = next;
+              try { fitRef.current && fitRef.current.fit(); } catch {}
+            }}
+          >A-</button>
+          <button
+            type="button"
+            className="secondary icon"
+            onClick={(e) => {
+              e.preventDefault();
+              pasteFromClipboard();
+            }}
+            title="Paste clipboard into terminal"
+          >📥</button>
+          <button
+            type="button"
+            className="secondary icon"
+            onClick={(e) => {
+              e.preventDefault();
+              const t = termRef.current;
+              if (t && typeof t.scrollToBottom === 'function') {
+                t.scrollToBottom();
+              }
+            }}
+            title="Scroll to bottom"
+          >⬇</button>
+          <span style={{ marginLeft: 6, borderLeft: '1px solid #444', paddingLeft: 12, display: 'inline-flex', gap: 6 }}>
+            {[1, 2, 3].map(n => (
+              <button
+                key={n}
+                type="button"
+                className="secondary"
+                style={{ minWidth: 32 }}
+                onClick={(e) => {
+                  e.preventDefault();
+                  const ws = wsRef.current;
+                  if (ws && ws.readyState === WebSocket.OPEN) {
+                    ws.send(String(n) + '\r');
+                  }
+                }}
+                title={`Send ${n} + Enter`}
+              >{n}</button>
+            ))}
           </span>
         </div>
         <div>
           <button
+            type="button"
             className={"secondary icon" + (fullscreenActive ? " active" : "")}
-            onClick={toggleFullscreen}
+            onClick={(e) => {
+              e.preventDefault();
+              toggleFullscreen();
+            }}
             title={fullscreenActive ? 'Exit fullscreen' : 'Fullscreen terminal'}
           >{fullscreenActive ? '⤡' : '⤢'}</button>
         </div>
