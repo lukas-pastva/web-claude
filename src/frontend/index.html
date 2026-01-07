@@ -408,6 +408,11 @@
       .d2h-code-line-ctn { white-space: pre; overflow-x: visible; }
       .diff-content { overflow-x: auto; }
 
+      /* Side-by-side diff layout fixes */
+      .d2h-file-side-diff { display: inline-block !important; width: 50% !important; vertical-align: top; }
+      .d2h-files-diff { display: flex !important; flex-direction: row !important; }
+      .d2h-file-diff { flex: 1 1 50%; min-width: 0; }
+
       /* Mobile Responsive */
       @media (max-width: 768px) {
         .container { padding: 12px; }

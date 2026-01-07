@@ -750,9 +750,13 @@ function RepoActions({ repo, meta, setMeta }) {
                   onClick={() => setShowPretty(false)}
                 >Raw</button>
                 <button
-                  className={`toggle-btn ${showPretty ? 'active' : ''}`}
-                  onClick={() => setShowPretty(true)}
-                >Pretty</button>
+                  className={`toggle-btn ${showPretty && prettyMode === 'unified' ? 'active' : ''}`}
+                  onClick={() => { setShowPretty(true); setPrettyMode('unified'); }}
+                >Unified</button>
+                <button
+                  className={`toggle-btn ${showPretty && prettyMode === 'side-by-side' ? 'active' : ''}`}
+                  onClick={() => { setShowPretty(true); setPrettyMode('side-by-side'); }}
+                >Side-by-Side</button>
                 <button
                   className="toggle-btn icon-btn"
                   onClick={toggleDiffFullscreen}
@@ -784,7 +788,7 @@ function RepoActions({ repo, meta, setMeta }) {
             )}
             <div className="diff-content">
               {showPretty ? (
-                <DiffPretty diff={displayedPatch} mode="unified" />
+                <DiffPretty diff={displayedPatch} mode={prettyMode} />
               ) : (
                 <code className="diff-raw">{displayedPatch}</code>
               )}
