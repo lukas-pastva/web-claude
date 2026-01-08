@@ -294,14 +294,35 @@ export default function ClaudeTerminal({ repoPath }) {
                 style={{ minWidth: 32 }}
                 onClick={(e) => {
                   e.preventDefault();
+                  const t = termRef.current;
                   const ws = wsRef.current;
-                  if (ws && ws.readyState === 1) {
-                    ws.send(String(n) + '\r');
+                  if (t) {
+                    t.focus();
+                  }
+                  if (ws && ws.readyState === WebSocket.OPEN) {
+                    ws.send(String(n));
                   }
                 }}
-                title={`Send ${n} + Enter`}
+                title={`Send ${n}`}
               >{n}</button>
             ))}
+            <button
+              type="button"
+              className="secondary"
+              style={{ minWidth: 32 }}
+              onClick={(e) => {
+                e.preventDefault();
+                const t = termRef.current;
+                const ws = wsRef.current;
+                if (t) {
+                  t.focus();
+                }
+                if (ws && ws.readyState === WebSocket.OPEN) {
+                  ws.send('\r');
+                }
+              }}
+              title="Send Enter"
+            >↵</button>
           </span>
         </div>
         <div>
