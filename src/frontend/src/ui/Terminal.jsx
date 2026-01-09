@@ -286,7 +286,7 @@ export default function ClaudeTerminal({ repoPath }) {
             title="Scroll to bottom"
           >⬇</button>
           <span style={{ marginLeft: 6, borderLeft: '1px solid #444', paddingLeft: 12, display: 'inline-flex', gap: 6 }}>
-            {[1, 2, 3].map(n => (
+            {[1, 2].map(n => (
               <button
                 key={n}
                 type="button"
@@ -306,23 +306,6 @@ export default function ClaudeTerminal({ repoPath }) {
                 title={`Send ${n}`}
               >{n}</button>
             ))}
-            <button
-              type="button"
-              className="secondary"
-              style={{ minWidth: 32 }}
-              onClick={(e) => {
-                e.preventDefault();
-                const t = termRef.current;
-                const ws = wsRef.current;
-                if (t) {
-                  t.focus();
-                }
-                if (ws && ws.readyState === WebSocket.OPEN) {
-                  ws.send('\r');
-                }
-              }}
-              title="Send Enter"
-            >↵</button>
           </span>
         </div>
         <div>

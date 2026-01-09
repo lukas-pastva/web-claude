@@ -731,75 +731,76 @@ function RepoActions({ repo, meta, setMeta }) {
         </div>
 
         <FileTree repoPath={meta.repoPath} onOpen={async (p)=>{ const r=await axios.get("/api/git/file",{params:{repoPath:meta.repoPath,path:p}}); }} />
-        {/* Diff Preview Card */}
-        {(patch || "").trim() && (
-          <div
-            ref={diffPaneRef}
-            className={`card diff-card ${(isDiffFullscreen || manualDiffFullscreen) ? 'fullscreen' : ''}`}
-          >
-            <div className="card-header">
-              <span className="card-title">
-                Changes
-                {changedFiles.length > 0 && (
-                  <span className="count-badge">{changedFiles.length}</span>
-                )}
-              </span>
-              <div className="view-toggles">
-                <button
-                  className={`toggle-btn ${showPretty ? '' : 'active'}`}
-                  onClick={() => setShowPretty(false)}
-                >Raw</button>
-                <button
-                  className={`toggle-btn ${showPretty && prettyMode === 'unified' ? 'active' : ''}`}
-                  onClick={() => { setShowPretty(true); setPrettyMode('unified'); }}
-                >Unified</button>
-                <button
-                  className={`toggle-btn ${showPretty && prettyMode === 'side-by-side' ? 'active' : ''}`}
-                  onClick={() => { setShowPretty(true); setPrettyMode('side-by-side'); }}
-                >Side-by-Side</button>
-                <button
-                  className="toggle-btn icon-btn"
-                  onClick={toggleDiffFullscreen}
-                >
-                  {(isDiffFullscreen || manualDiffFullscreen) ? '✕' : '⤢'}
-                </button>
-              </div>
-            </div>
-            {changedFiles.length > 0 && (
-              <div className="file-chips">
-                {(showAllChanged ? changedFiles : changedFiles.slice(0, 10)).map((f, idx) => {
-                  const active = selectedDiffFile === f.path;
-                  return (
-                    <button
-                      key={idx}
-                      className={`chip ${f.status} ${active ? 'active' : ''}`}
-                      onClick={() => setSelectedDiffFile(p => (p === f.path ? "" : f.path))}
-                    >
-                      {f.path.split('/').pop()}
-                    </button>
-                  );
-                })}
-                {(!showAllChanged && changedFiles.length > 10) && (
-                  <button className="chip more" onClick={() => setShowAllChanged(true)}>
-                    +{changedFiles.length - 10}
-                  </button>
-                )}
-              </div>
-            )}
-            <div className="diff-content">
-              {showPretty ? (
-                <DiffPretty diff={displayedPatch} mode={prettyMode} />
-              ) : (
-                <code className="diff-raw">{displayedPatch}</code>
-              )}
-            </div>
-          </div>
-        )}
       </div>
 
       <div className="col cli-col">
         <ClaudeTerminal repoPath={meta.repoPath} />
       </div>
+
+      {/* Diff Preview Card - outside main-col for mobile reordering */}
+      {(patch || "").trim() && (
+        <div
+          ref={diffPaneRef}
+          className={`col diff-col card diff-card ${(isDiffFullscreen || manualDiffFullscreen) ? 'fullscreen' : ''}`}
+        >
+          <div className="card-header">
+            <span className="card-title">
+              Changes
+              {changedFiles.length > 0 && (
+                <span className="count-badge">{changedFiles.length}</span>
+              )}
+            </span>
+            <div className="view-toggles">
+              <button
+                className={`toggle-btn ${showPretty ? '' : 'active'}`}
+                onClick={() => setShowPretty(false)}
+              >Raw</button>
+              <button
+                className={`toggle-btn ${showPretty && prettyMode === 'unified' ? 'active' : ''}`}
+                onClick={() => { setShowPretty(true); setPrettyMode('unified'); }}
+              >Unified</button>
+              <button
+                className={`toggle-btn ${showPretty && prettyMode === 'side-by-side' ? 'active' : ''}`}
+                onClick={() => { setShowPretty(true); setPrettyMode('side-by-side'); }}
+              >Side-by-Side</button>
+              <button
+                className="toggle-btn icon-btn"
+                onClick={toggleDiffFullscreen}
+              >
+                {(isDiffFullscreen || manualDiffFullscreen) ? '✕' : '⤢'}
+              </button>
+            </div>
+          </div>
+          {changedFiles.length > 0 && (
+            <div className="file-chips">
+              {(showAllChanged ? changedFiles : changedFiles.slice(0, 10)).map((f, idx) => {
+                const active = selectedDiffFile === f.path;
+                return (
+                  <button
+                    key={idx}
+                    className={`chip ${f.status} ${active ? 'active' : ''}`}
+                    onClick={() => setSelectedDiffFile(p => (p === f.path ? "" : f.path))}
+                  >
+                    {f.path.split('/').pop()}
+                  </button>
+                );
+              })}
+              {(!showAllChanged && changedFiles.length > 10) && (
+                <button className="chip more" onClick={() => setShowAllChanged(true)}>
+                  +{changedFiles.length - 10}
+                </button>
+              )}
+            </div>
+          )}
+          <div className="diff-content">
+            {showPretty ? (
+              <DiffPretty diff={displayedPatch} mode={prettyMode} />
+            ) : (
+              <code className="diff-raw">{displayedPatch}</code>
+            )}
+          </div>
+        </div>
+      )}
 
       {/* New Branch Modal */}
       {showNewBranchModal && (
@@ -935,8 +936,8 @@ export default function App() {
     else root.setAttribute('data-theme', themeMode);
   }, [themeMode]);
 
-  const cycleTheme = () => setThemeMode(m => m === 'auto' ? 'dark' : (m === 'dark' ? 'light' : 'auto'));
-  const themeIcon = themeMode === 'auto' ? '🖥️' : (themeMode === 'dark' ? '🌙' : '☀️');
+  const cycleTheme = () => setThemeMode(m => m === 'auto' ? 'dark' : (m === 'dark' ? 'superdark' : (m === 'superdark' ? 'light' : 'auto')));
+  const themeIcon = themeMode === 'auto' ? '🖥️' : (themeMode === 'dark' ? '🌙' : (themeMode === 'superdark' ? '🌑' : '☀️'));
 
   // CLI-only mode: no config fetch needed
 
