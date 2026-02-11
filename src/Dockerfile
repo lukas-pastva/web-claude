@@ -27,8 +27,8 @@ RUN npm --prefix backend run build
 FROM node:20-alpine
 WORKDIR /app
 ENV NODE_ENV=production
-# Build deps for node-pty; shell tools; git
-RUN apk add --no-cache bash git g++ make python3 linux-headers
+# Build deps for node-pty; shell tools; git; GitHub CLI; GitLab CLI
+RUN apk add --no-cache bash git g++ make python3 linux-headers github-cli glab
 
 # Install Claude CLI globally
 RUN npm i -g @anthropic-ai/claude-code
@@ -37,6 +37,10 @@ RUN npm i -g @anthropic-ai/claude-code
 COPY --from=be /app/backend/dist ./backend/dist
 COPY backend/package.json backend/package-lock.json* ./backend/
 RUN npm --prefix backend ci --omit=dev || npm --prefix backend i --omit=dev
+
+# Copy entrypoint script
+COPY entrypoint.sh /entrypoint.sh
+RUN chmod +x /entrypoint.sh
 
 # Create app user with home at /home/app (uid 1000 matches K8s securityContext)
 RUN mkdir -p /home/app/.claude /data/repos \
@@ -47,4 +51,5 @@ ENV HOME=/home/app
 # Data directory for repos
 VOLUME ["/data"]
 EXPOSE 8080
+ENTRYPOINT ["/entrypoint.sh"]
 CMD ["node", "backend/dist/server.js"]
