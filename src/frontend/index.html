@@ -449,6 +449,16 @@
         .main-col { order: 0; }
         .cli-col { order: 1; }
         .diff-col { order: 2; }
+
+        /* CLI pane full width on mobile */
+        .cli-col { margin-left: -12px; margin-right: -12px; }
+        .cli-col .pane {
+          border-left: none;
+          border-right: none;
+          border-radius: 0;
+          padding-left: 0;
+          padding-right: 0;
+        }
       }
 
       @media (min-width: 769px) {

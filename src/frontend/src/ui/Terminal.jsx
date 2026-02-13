@@ -19,6 +19,7 @@ export default function ClaudeTerminal({ repoPath }) {
 
   const [showPasteModal, setShowPasteModal] = useState(false);
   const [pasteBuffer, setPasteBuffer] = useState("");
+  const [linkPopup, setLinkPopup] = useState(null); // { uri, x, y }
   const pasteFromClipboard = async () => {
     try {
       const ws = wsRef.current;
@@ -58,9 +59,14 @@ export default function ClaudeTerminal({ repoPath }) {
     const fit = new FitAddon();
     fitRef.current = fit;
     term.loadAddon(fit);
-    // Make URLs clickable - opens in new tab
+    // Make URLs clickable - show popup with Open/Copy options
     const webLinks = new WebLinksAddon((event, uri) => {
-      window.open(uri, '_blank', 'noopener,noreferrer');
+      if (isMountedRef.current) {
+        const rect = ref.current?.getBoundingClientRect();
+        const x = event.clientX || (rect ? rect.left + rect.width / 2 : window.innerWidth / 2);
+        const y = event.clientY || (rect ? rect.top + 40 : 100);
+        setLinkPopup({ uri, x, y });
+      }
     });
     term.loadAddon(webLinks);
     termRef.current = term;
@@ -294,11 +300,7 @@ export default function ClaudeTerminal({ repoPath }) {
                 style={{ minWidth: 32 }}
                 onClick={(e) => {
                   e.preventDefault();
-                  const t = termRef.current;
                   const ws = wsRef.current;
-                  if (t) {
-                    t.focus();
-                  }
                   if (ws && ws.readyState === WebSocket.OPEN) {
                     ws.send(String(n));
                   }
@@ -344,6 +346,44 @@ export default function ClaudeTerminal({ repoPath }) {
                   setPasteBuffer('');
                 }}
               >Send</button>
+            </div>
+          </div>
+        </div>
+      )}
+      {linkPopup && (
+        <div
+          style={{position:'fixed',left:0,top:0,right:0,bottom:0,zIndex:1001}}
+          onClick={() => setLinkPopup(null)}
+        >
+          <div
+            style={{
+              position:'absolute',
+              left: Math.min(linkPopup.x, window.innerWidth - 260),
+              top: Math.min(linkPopup.y, window.innerHeight - 120),
+              background:'var(--bg-card, #1e1e1e)',
+              border:'1px solid var(--border, #444)',
+              borderRadius:8,
+              padding:10,
+              boxShadow:'0 6px 24px rgba(0,0,0,0.5)',
+              maxWidth: 250,
+              zIndex:1002,
+            }}
+            onClick={e => e.stopPropagation()}
+          >
+            <div style={{fontSize:12,color:'var(--text-muted, #888)',marginBottom:6,wordBreak:'break-all',maxHeight:60,overflow:'hidden'}}>{linkPopup.uri}</div>
+            <div style={{display:'flex',gap:6}}>
+              <button
+                onClick={() => { window.open(linkPopup.uri, '_blank', 'noopener,noreferrer'); setLinkPopup(null); }}
+                style={{flex:1,fontSize:14}}
+              >Open</button>
+              <button
+                className="secondary"
+                onClick={() => {
+                  try { navigator.clipboard.writeText(linkPopup.uri); } catch {}
+                  setLinkPopup(null);
+                }}
+                style={{flex:1,fontSize:14}}
+              >Copy</button>
             </div>
           </div>
         </div>
