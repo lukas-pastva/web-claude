@@ -1053,61 +1053,67 @@ export default function App() {
 
   return (
     <div>
-      
-      <header>
-        <div style={{cursor:'pointer', display:'flex', alignItems:'center', gap:8}} onClick={handleGoHome} title="Home (repos)">
-          <strong>web-claude</strong>
-          {(() => {
-            const items = getProviderItems(providers);
-            if (items.length === 1) {
-              const it = items[0];
-              const count = (providers[it.provider]?.[it.key] || []).length;
-              return (
-                <span className="muted" style={{fontSize:'0.9em'}}>
-                  / {it.provider} / {it.key} <span className="tag">{count}</span>
-                </span>
-              );
-            }
-            return null;
-          })()}
-        </div>
+      {!currentRepo ? (
+        <>
+          <header>
+            <div style={{cursor:'pointer', display:'flex', alignItems:'center', gap:8}} onClick={handleGoHome} title="Home (repos)">
+              <strong>web-claude</strong>
+              {(() => {
+                const items = getProviderItems(providers);
+                if (items.length === 1) {
+                  const it = items[0];
+                  const count = (providers[it.provider]?.[it.key] || []).length;
+                  return (
+                    <span className="muted" style={{fontSize:'0.9em'}}>
+                      / {it.provider} / {it.key} <span className="tag">{count}</span>
+                    </span>
+                  );
+                }
+                return null;
+              })()}
+            </div>
 
-        <div style={{marginLeft:'auto', display:'flex', gap:8, alignItems:'center'}}>
-          <button className="secondary icon" onClick={cycleTheme} title={`Theme: ${themeMode}`}>{themeIcon}</button>
-        </div>
-      </header>
-      <div className="container">
-        <GroupTabs providers={providers} current={current} setCurrent={setCurrent} />
-        {!currentRepo ? (
-          loadingRepos ? (
-            <div className="pane"><div className="muted">Loading repos…</div></div>
-          ) : (
-            <RepoList
-              key={current}
-              repos={reposForCurrent}
-              onSelect={openRepo}
-              currentId={current}
-            />
-          )
-        ) : (
-          <>
-            <div className="pane" style={{marginBottom:12}}>
-              <div className="actions" style={{display:'flex',alignItems:'center',gap:8}}>
-                <div className="muted">
-                  {(() => { const [prov, key] = (current||'').split(':'); return `${prov||''}${key? ' / ' + key : ''}`; })()}
-                  {currentRepo ? ` / ${currentRepo.name}` : ''}
-                </div>
+            <div style={{marginLeft:'auto', display:'flex', gap:8, alignItems:'center'}}>
+              <button className="secondary icon" onClick={cycleTheme} title={`Theme: ${themeMode}`}>{themeIcon}</button>
+            </div>
+          </header>
+          <div className="container">
+            <GroupTabs providers={providers} current={current} setCurrent={setCurrent} />
+            {loadingRepos ? (
+              <div className="pane"><div className="muted">Loading repos…</div></div>
+            ) : (
+              <RepoList
+                key={current}
+                repos={reposForCurrent}
+                onSelect={openRepo}
+                currentId={current}
+              />
+            )}
+          </div>
+        </>
+      ) : (
+        <div className="container">
+          <div className="pane" style={{marginBottom:12}}>
+            <div className="actions" style={{display:'flex',alignItems:'center',gap:8}}>
+              <button className="secondary" onClick={handleGoHome} style={{display:'flex',alignItems:'center',gap:6}}>
+                <span style={{fontSize:'1.1em'}}>&larr;</span> Back
+              </button>
+              <div className="muted">
+                {(() => { const [prov, key] = (current||'').split(':'); return `${prov||''}${key? ' / ' + key : ''}`; })()}
+                {currentRepo ? ` / ${currentRepo.name}` : ''}
+              </div>
+              <div style={{marginLeft:'auto'}}>
+                <button className="secondary icon" onClick={cycleTheme} title={`Theme: ${themeMode}`}>{themeIcon}</button>
               </div>
             </div>
-            <RepoActions
-              repo={currentRepo}
-              meta={meta}
-              setMeta={setMeta}
-            />
-          </>
-        )}
-      </div>
-      {null}
+          </div>
+          <RepoActions
+            repo={currentRepo}
+            meta={meta}
+            setMeta={setMeta}
+          />
+        </div>
+      )}
     </div>
   );
 }
