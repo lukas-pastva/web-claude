@@ -28,7 +28,25 @@ FROM node:20-alpine
 WORKDIR /app
 ENV NODE_ENV=production
 # Build deps for node-pty; shell tools; git; GitHub CLI; GitLab CLI
-RUN apk add --no-cache bash git g++ make python3 linux-headers github-cli glab
+RUN apk add --no-cache bash git g++ make python3 linux-headers github-cli glab \
+    # Python pip & common libs
+    py3-pip py3-pillow py3-requests py3-flask py3-selenium \
+    # Image processing libs (for Pillow/PIL)
+    jpeg-dev libpng-dev libwebp-dev tiff-dev freetype-dev \
+    # Headless browser
+    chromium chromium-chromedriver \
+    # Media processing
+    ffmpeg \
+    # General utilities
+    curl openssh jq wget tar xz zip unzip
+
+# Node.js build/test/lint tools (used by Claude when verifying implementations)
+RUN npm i -g typescript tsx ts-node eslint prettier vite jest vitest \
+    npx nodemon concurrently tsup
+
+# Python build/test tools
+RUN pip3 install --break-system-packages --no-cache-dir \
+    pytest black flake8 mypy pyyaml beautifulsoup4 lxml mysql-connector-python
 
 # Install Claude CLI globally
 RUN npm i -g @anthropic-ai/claude-code
