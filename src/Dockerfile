@@ -42,7 +42,7 @@ RUN apk add --no-cache bash git g++ make python3 linux-headers github-cli glab \
 
 # Node.js build/test/lint tools (used by Claude when verifying implementations)
 RUN npm i -g typescript tsx ts-node eslint prettier vite jest vitest \
-    npx nodemon concurrently tsup
+    nodemon concurrently tsup
 
 # Python build/test tools
 RUN pip3 install --break-system-packages --no-cache-dir \
