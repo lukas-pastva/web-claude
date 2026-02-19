@@ -648,7 +648,7 @@ function RepoActions({ repo, meta, setMeta }) {
                 {checkingOut ? (
                   <><span className="spinner" /></>
                 ) : (
-                  <><span className="icon branch-icon">⎇</span> {branches.current || 'main'} <span className="dropdown-arrow">▼</span></>
+                  <><span className="icon branch-icon">⎇</span><span className="btn-label"> {branches.current || 'main'} <span className="dropdown-arrow">▼</span></span></>
                 )}
               </button>
               {showBranchDropdown && (
@@ -683,11 +683,11 @@ function RepoActions({ repo, meta, setMeta }) {
               disabled={pulling}
             >
               {pulling ? (
-                <><span className="spinner" /> Pulling...</>
+                <><span className="spinner" /><span className="btn-label"> Pulling...</span></>
               ) : pullInfo.upToDate ? (
-                <><span className="icon">✓</span> Up to date</>
+                <><span className="icon">✓</span><span className="btn-label"> Up to date</span></>
               ) : (
-                <><span className="icon">↓</span> Pull</>
+                <><span className="icon">↓</span><span className="btn-label"> Pull</span></>
               )}
             </button>
             <button
@@ -696,9 +696,9 @@ function RepoActions({ repo, meta, setMeta }) {
               disabled={!(patch||"").trim() || pushing}
             >
               {pushing ? (
-                <><span className="spinner" /> Pushing...</>
+                <><span className="spinner" /><span className="btn-label"> Pushing...</span></>
               ) : (
-                <><span className="icon">↑</span> Push</>
+                <><span className="icon">↑</span><span className="btn-label"> Push</span></>
               )}
             </button>
             <button
@@ -708,9 +708,9 @@ function RepoActions({ repo, meta, setMeta }) {
               title="Discard all uncommitted changes"
             >
               {rolling ? (
-                <><span className="spinner" /> Rolling back...</>
+                <><span className="spinner" /><span className="btn-label"> Rolling back...</span></>
               ) : (
-                <><span className="icon">↩</span> Rollback</>
+                <><span className="icon">↩</span><span className="btn-label"> Rollback</span></>
               )}
             </button>
             {log && log.length > 0 && (

@@ -432,14 +432,24 @@
         .row { flex-direction: column; gap: 12px; }
 
         .card, .pane { padding: 12px; }
-        .card-header { flex-direction: column; align-items: flex-start; }
-        .card-actions { width: 100%; }
-        .card-actions .btn { flex: 1; }
+        .card-header { flex-direction: row; align-items: center; }
+        .card-actions { width: 100%; flex-wrap: nowrap; }
+        .card-actions .btn {
+          flex: 0 1 auto;
+          padding: 6px 10px;
+          min-height: 36px;
+          font-size: 13px;
+        }
+
+        /* Icon-only git buttons on mobile */
+        .card-actions .btn-label { display: none; }
+        .btn-branch { min-width: auto !important; }
 
         .term { height: 50vh !important; }
         .diff-raw { max-height: 40vh; font-size: 11px; }
 
         button, input, select { font-size: 16px; min-height: 44px; }
+        .card-actions button { font-size: 14px; min-height: 36px; }
 
         .view-toggles { width: 100%; justify-content: center; }
 
