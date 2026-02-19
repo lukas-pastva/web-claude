@@ -275,6 +275,35 @@ export default function ClaudeTerminal({ repoPath }) {
             className="secondary icon"
             onClick={(e) => {
               e.preventDefault();
+              const t = termRef.current;
+              if (!t) return;
+              const buf = t.buffer.active;
+              const lines = [];
+              for (let i = 0; i < buf.length; i++) {
+                const line = buf.getLine(i);
+                if (line) lines.push(line.translateToString(true));
+              }
+              const text = lines.join('\n').replace(/\n+$/, '');
+              try {
+                navigator.clipboard.writeText(text);
+              } catch {
+                const ta = document.createElement('textarea');
+                ta.value = text;
+                ta.style.position = 'fixed';
+                ta.style.opacity = '0';
+                document.body.appendChild(ta);
+                ta.select();
+                document.execCommand('copy');
+                document.body.removeChild(ta);
+              }
+            }}
+            title="Copy terminal content to clipboard"
+          >📋</button>
+          <button
+            type="button"
+            className="secondary icon"
+            onClick={(e) => {
+              e.preventDefault();
               pasteFromClipboard();
             }}
             title="Paste clipboard into terminal"
