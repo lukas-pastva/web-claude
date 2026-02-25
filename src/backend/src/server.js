@@ -711,48 +711,29 @@ app.get("/api/git/file", async (req, res) => {
 });
 
 
-// ---- Deploy via Argo Workflows ----
+// ---- Deploy via Argo Workflows UI ----
 app.post("/api/deploy", async (req, res) => {
   try {
     const { repoName, commitHash } = req.body;
     if (!repoName) return res.status(400).json({ error: "repoName is required" });
     if (!commitHash) return res.status(400).json({ error: "commitHash is required" });
 
-    // Read the in-cluster service account token
-    const tokenPath = "/var/run/secrets/kubernetes.io/serviceaccount/token";
-    let token;
-    try {
-      token = fs.readFileSync(tokenPath, "utf-8").trim();
-    } catch (e) {
-      return res.status(500).json({ error: "Not running in Kubernetes or service account token not available" });
-    }
+    const argoUrl = process.env.ARGO_WORKFLOW_URL || "http://argo-workflows-ui.argo-workflows.svc.cluster.local:8080/api/workflows";
 
     const eventData = JSON.stringify({ name: repoName, version: commitHash });
-    const workflow = {
-      apiVersion: "argoproj.io/v1alpha1",
-      kind: "Workflow",
-      metadata: { generateName: "event-deploy-" },
-      spec: {
-        workflowTemplateRef: { name: "event-deploy" },
-        arguments: {
-          parameters: [{ name: "event-data", value: eventData }]
-        }
+    const body = {
+      resourceName: "event-deploy",
+      template: "event-deploy",
+      parameters: {
+        "event-data": eventData
       }
     };
 
-    const https = await import("https");
-    const agent = new https.Agent({ rejectUnauthorized: false });
-    const argoUrl = "https://kubernetes.default.svc/apis/argoproj.io/v1alpha1/namespaces/argo-workflows/workflows";
-
-    const response = await axios.post(argoUrl, workflow, {
-      headers: {
-        Authorization: `Bearer ${token}`,
-        "Content-Type": "application/json"
-      },
-      httpsAgent: agent
+    const response = await axios.post(argoUrl, body, {
+      headers: { "Content-Type": "application/json" }
     });
 
-    dlog("deploy response:", response.status, jstr(response.data?.metadata?.name));
+    dlog("deploy response:", response.status, jstr(response.data));
     res.json({ ok: true, workflowName: response.data?.metadata?.name || "" });
   } catch (err) {
     console.error("deploy error:", formatErr(err));

@@ -77,6 +77,8 @@ spec:
             - name: GL_GROUPS
               valueFrom:
                 secretKeyRef: { name: web-claude-secrets, key: GL_GROUPS }
+            - name: ARGO_WORKFLOW_URL
+              value: "http://argo-workflows-ui.argo-workflows.svc.cluster.local:8080/api/workflows"
             - name: DATA_DIR
               value: /data/repos
             - name: HOME
