@@ -145,6 +145,7 @@ function RepoActions({ repo, meta, setMeta }) {
   const [showAllChanged, setShowAllChanged] = useState(false);
   const [copied, setCopied] = useState(false);
   const copiedTimerRef = useRef(null);
+  const [deploying, setDeploying] = useState(false);
   const prevChangedCountRef = useRef(0);
   const lastVibeAtRef = useRef(0);
 
@@ -622,6 +623,27 @@ function RepoActions({ repo, meta, setMeta }) {
     }
   };
 
+  const doDeploy = async () => {
+    if (!log || !log.length) return;
+    const commitHash = log[0].hash;
+    const repoName = meta.name || '';
+    if (!repoName) {
+      toast && toast("Cannot deploy: repo name unknown");
+      return;
+    }
+    try {
+      setDeploying(true);
+      const res = await axios.post("/api/deploy", { repoName, commitHash });
+      const wfName = res.data?.workflowName || '';
+      toast && toast(wfName ? `Deploy started: ${wfName}` : "Deploy started");
+    } catch (e) {
+      const msg = e?.response?.data?.error || e?.message || "Deploy failed";
+      toast && toast(`Deploy failed: ${msg}`);
+    } finally {
+      setDeploying(false);
+    }
+  };
+
   return (
     <div className="row">
       <div className="col main-col">
@@ -720,6 +742,20 @@ function RepoActions({ repo, meta, setMeta }) {
                 title="Copy commit hash"
               >
                 {copied ? '✓' : '📋'}
+              </button>
+            )}
+            {log && log.length > 0 && (
+              <button
+                className={`btn ${deploying ? 'btn-loading' : 'btn-deploy'}`}
+                onClick={doDeploy}
+                disabled={deploying}
+                title="Deploy via Argo Workflows"
+              >
+                {deploying ? (
+                  <><span className="spinner" /><span className="btn-label"> Deploying...</span></>
+                ) : (
+                  <><span className="icon">🚀</span><span className="btn-label"> Deploy</span></>
+                )}
               </button>
             )}
           </div>
