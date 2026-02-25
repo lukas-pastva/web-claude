@@ -38,7 +38,9 @@ RUN apk add --no-cache bash git g++ make python3 linux-headers github-cli glab \
     # Media processing
     ffmpeg \
     # General utilities
-    curl openssh jq wget tar xz zip unzip
+    curl openssh jq wget tar xz zip unzip \
+    # Go language
+    go
 
 # Node.js build/test/lint tools (used by Claude when verifying implementations)
 RUN npm i -g typescript tsx ts-node eslint prettier vite jest vitest \
@@ -65,6 +67,8 @@ RUN mkdir -p /home/app/.claude /data/repos \
     && chown -R 1000:1000 /home/app /data /app
 USER 1000
 ENV HOME=/home/app
+ENV GOPATH=/home/app/go
+ENV PATH="$GOPATH/bin:$PATH"
 
 # Data directory for repos
 VOLUME ["/data"]
