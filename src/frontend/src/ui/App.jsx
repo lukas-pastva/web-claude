@@ -127,7 +127,7 @@ function RepoList({ repos, onSelect, currentId }) {
   )
 }
 
-function RepoActions({ repo, meta, setMeta }) {
+function RepoActions({ repo, meta, setMeta, appConfig }) {
   const toast = useToast();
   const [log, setLog] = useState([]);
   const [patch, setPatch] = useState("");
@@ -148,6 +148,8 @@ function RepoActions({ repo, meta, setMeta }) {
   const [deploying, setDeploying] = useState(false);
   const prevChangedCountRef = useRef(0);
   const lastVibeAtRef = useRef(0);
+  const [diffCollapsed, setDiffCollapsed] = useState(true);
+  const autoSyncDoneRef = useRef(false);
 
   // Branch management state
   const [branches, setBranches] = useState({ current: '', all: [] });
@@ -277,19 +279,44 @@ function RepoActions({ repo, meta, setMeta }) {
     }
   }, [showBranchDropdown]);
 
+  // Auto-sync: rollback local changes + pull if behind on repo load
+  const doAutoSync = async (signal) => {
+    if (autoSyncDoneRef.current) return;
+    autoSyncDoneRef.current = true;
+    try {
+      // Check for local changes and rollback
+      const diffRes = await axios.get("/api/git/diff", { params: { repoPath: meta.repoPath }, signal });
+      if ((diffRes.data.diff || "").trim()) {
+        await axios.post("/api/git/rollback", { repoPath: meta.repoPath });
+      }
+      // Pull if behind
+      const statusRes = await axios.get("/api/git/status", { params: { repoPath: meta.repoPath }, signal });
+      if (Number(statusRes.data.status?.behind || 0) > 0) {
+        await axios.post("/api/git/pull", { repoPath: meta.repoPath });
+      }
+    } catch (e) {
+      if (e.name !== 'CanceledError' && e.name !== 'AbortError') {
+        console.error("Auto-sync failed:", e);
+      }
+    }
+  };
+
   // Initial data load when repo changes - with abort controller
   useEffect(() => {
     if (!meta.repoPath) return;
+    autoSyncDoneRef.current = false;
     const controller = createAbortController();
     abortControllersRef.current.init = controller;
 
-    // Load all data with the abort signal
-    Promise.all([
-      refreshLog(controller.signal).catch(() => {}),
-      refreshStatus(controller.signal).catch(() => {}),
-      refreshDiff(controller.signal).catch(() => {}),
-      refreshBranches(controller.signal).catch(() => {})
-    ]);
+    // Auto-sync first, then load all data
+    doAutoSync(controller.signal).then(() =>
+      Promise.all([
+        refreshLog(controller.signal).catch(() => {}),
+        refreshStatus(controller.signal).catch(() => {}),
+        refreshDiff(controller.signal).catch(() => {}),
+        refreshBranches(controller.signal).catch(() => {})
+      ])
+    );
 
     return () => {
       controller.abort();
@@ -624,8 +651,6 @@ function RepoActions({ repo, meta, setMeta }) {
   };
 
   const doDeploy = async () => {
-    if (!log || !log.length) return;
-    const commitHash = log[0].hash;
     const repoName = meta.name || '';
     if (!repoName) {
       toast && toast("Cannot deploy: repo name unknown");
@@ -633,6 +658,21 @@ function RepoActions({ repo, meta, setMeta }) {
     }
     try {
       setDeploying(true);
+      // Push first if there are local changes
+      if ((patch || "").trim()) {
+        const message = "claude-" + new Date().toISOString();
+        await axios.post("/api/git/commitPush", { repoPath: meta.repoPath, message });
+        await refreshLog();
+        await refreshDiff();
+      }
+      // Now deploy with latest commit
+      const logRes = await axios.get("/api/git/log", { params: { repoPath: meta.repoPath } });
+      const commits = logRes.data.commits || [];
+      if (!commits.length) {
+        toast && toast("Cannot deploy: no commits");
+        return;
+      }
+      const commitHash = commits[0].hash;
       const res = await axios.post("/api/deploy", { repoName, commitHash });
       const wfName = res.data?.workflowName || '';
       toast && toast(wfName ? `Deploy started: ${wfName}` : "Deploy started");
@@ -647,11 +687,11 @@ function RepoActions({ repo, meta, setMeta }) {
   return (
     <div className="row">
       <div className="col main-col">
-        {/* Git Actions Card */}
+        {/* Actions Card */}
         <div className="card">
           <div className="card-header">
-            <span className="card-title">Git Actions</span>
-            {log && log.length > 0 && (
+            <span className="card-title">Actions</span>
+            {appConfig.showCommitHash && log && log.length > 0 && (
               <span className="commit-badge">
                 <a href={log[0].web_url || '#'} target="_blank" rel="noreferrer">
                   {log[0].hash.slice(0, 7)}
@@ -660,7 +700,8 @@ function RepoActions({ repo, meta, setMeta }) {
             )}
           </div>
           <div className="card-actions">
-            {/* Branch dropdown */}
+            {/* Branch dropdown - hidden unless SHOW_BRANCH_SELECTOR env var */}
+            {appConfig.showBranchSelector && (
             <div className="branch-dropdown-container" ref={branchDropdownRef} style={{position:'relative'}}>
               <button
                 className={`btn btn-branch ${checkingOut ? 'btn-loading' : ''}`}
@@ -699,6 +740,7 @@ function RepoActions({ repo, meta, setMeta }) {
                 </div>
               )}
             </div>
+            )}
             <button
               className={`btn ${pulling ? 'btn-loading' : pullInfo.upToDate ? 'btn-success' : 'btn-secondary'}`}
               onClick={doPull}
@@ -712,6 +754,7 @@ function RepoActions({ repo, meta, setMeta }) {
                 <><span className="icon">↓</span><span className="btn-label"> Pull</span></>
               )}
             </button>
+            {appConfig.showPush && (
             <button
               className={`btn ${pushing ? 'btn-loading' : 'btn-primary'}`}
               onClick={doApplyCommitPush}
@@ -723,6 +766,8 @@ function RepoActions({ repo, meta, setMeta }) {
                 <><span className="icon">↑</span><span className="btn-label"> Push</span></>
               )}
             </button>
+            )}
+            {appConfig.showRollback && (
             <button
               className={`btn ${rolling ? 'btn-loading' : 'btn-danger'}`}
               onClick={doRollback}
@@ -735,7 +780,8 @@ function RepoActions({ repo, meta, setMeta }) {
                 <><span className="icon">↩</span><span className="btn-label"> Rollback</span></>
               )}
             </button>
-            {log && log.length > 0 && (
+            )}
+            {appConfig.showCommitHash && log && log.length > 0 && (
               <button
                 className={`btn btn-ghost ${copied ? 'btn-copied' : ''}`}
                 onClick={() => copyHash(log[0].hash)}
@@ -770,23 +816,25 @@ function RepoActions({ repo, meta, setMeta }) {
       </div>
 
       <div className="col cli-col">
-        <ClaudeTerminal repoPath={meta.repoPath} />
+        <ClaudeTerminal repoPath={meta.repoPath} showTextSize={appConfig.showTextSize} />
       </div>
 
-      {/* Diff Preview Card - outside main-col for mobile reordering */}
+      {/* Diff Preview Card - collapsed by default */}
       {(patch || "").trim() && (
         <div
           ref={diffPaneRef}
           className={`col diff-col card diff-card ${(isDiffFullscreen || manualDiffFullscreen) ? 'fullscreen' : ''}`}
         >
-          <div className="card-header">
+          <div className="card-header" onClick={() => setDiffCollapsed(c => !c)} style={{cursor:'pointer'}}>
             <span className="card-title">
+              <span style={{display:'inline-block',transform:diffCollapsed?'rotate(-90deg)':'rotate(0deg)',transition:'transform 0.15s',marginRight:4}}>&#9660;</span>
               Changes
               {changedFiles.length > 0 && (
                 <span className="count-badge">{changedFiles.length}</span>
               )}
             </span>
-            <div className="view-toggles">
+            {!diffCollapsed && (
+            <div className="view-toggles" onClick={e => e.stopPropagation()}>
               <button
                 className={`toggle-btn ${showPretty ? '' : 'active'}`}
                 onClick={() => setShowPretty(false)}
@@ -806,7 +854,10 @@ function RepoActions({ repo, meta, setMeta }) {
                 {(isDiffFullscreen || manualDiffFullscreen) ? '✕' : '⤢'}
               </button>
             </div>
+            )}
           </div>
+          {!diffCollapsed && (
+          <>
           {changedFiles.length > 0 && (
             <div className="file-chips">
               {(showAllChanged ? changedFiles : changedFiles.slice(0, 10)).map((f, idx) => {
@@ -835,6 +886,8 @@ function RepoActions({ repo, meta, setMeta }) {
               <code className="diff-raw">{displayedPatch}</code>
             )}
           </div>
+          </>
+          )}
         </div>
       )}
 
@@ -899,6 +952,28 @@ export default function App() {
   const routeRef = useRef({});
   const [pendingRepoId, setPendingRepoId] = useState("");
   const openingFromUrlRef = useRef(false);
+  const [appConfig, setAppConfig] = useState({
+    showBranchSelector: false,
+    showRollback: false,
+    showPush: false,
+    showCommitHash: false,
+    showTextSize: false,
+  });
+
+  // Fetch app config on mount
+  useEffect(() => {
+    axios.get("/api/config").then(r => {
+      const d = r.data || {};
+      setAppConfig(prev => ({
+        ...prev,
+        showBranchSelector: Boolean(d.showBranchSelector),
+        showRollback: Boolean(d.showRollback),
+        showPush: Boolean(d.showPush),
+        showCommitHash: Boolean(d.showCommitHash),
+        showTextSize: Boolean(d.showTextSize),
+      }));
+    }).catch(() => {});
+  }, []);
 
   const handleGoHome = () => {
     setPhase('repos');
@@ -1147,6 +1222,7 @@ export default function App() {
             repo={currentRepo}
             meta={meta}
             setMeta={setMeta}
+            appConfig={appConfig}
           />
         </div>
       )}

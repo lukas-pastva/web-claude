@@ -40,7 +40,17 @@ function formatErr(err) {
 
 // Config endpoint
 app.get("/api/config", (req, res) => {
-  res.json({ claude: true, cliPatch: Boolean(process.env.CLAUDE_PATCH_CMD), debug: DEBUG });
+  const boolEnv = (k) => ["1", "true", "yes", "on"].includes(String(process.env[k] || "").toLowerCase());
+  res.json({
+    claude: true,
+    cliPatch: Boolean(process.env.CLAUDE_PATCH_CMD),
+    debug: DEBUG,
+    showBranchSelector: boolEnv("SHOW_BRANCH_SELECTOR"),
+    showRollback: boolEnv("SHOW_ROLLBACK"),
+    showPush: boolEnv("SHOW_PUSH"),
+    showCommitHash: boolEnv("SHOW_COMMIT_HASH"),
+    showTextSize: boolEnv("SHOW_TEXT_SIZE"),
+  });
 });
 
 // ---- Configuration ----

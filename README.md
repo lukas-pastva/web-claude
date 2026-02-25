@@ -142,9 +142,10 @@ Security note: provide Git tokens via Secret/env and avoid verbose logs in produ
 
 1. Open the app and choose a provider tab (GitHub user/org or GitLab group).
 2. Click a repo row to clone/open it.
-3. The terminal is always visible for CLI usage (Claude CLI).
-4. Use the actions row to pull/checkout/commit/push.
-5. Diff preview auto-refreshes by default; adjust interval as needed.
+3. On open, the app auto-syncs: discards any local changes and pulls if behind remote.
+4. The terminal is always visible for CLI usage (Claude CLI).
+5. Use the Actions bar to pull or deploy. Deploy pushes any local changes first, then triggers deployment.
+6. The diff preview auto-refreshes every 5s and is collapsed by default — click the header to expand.
 
 ## Environment Variables
 
@@ -153,6 +154,7 @@ Security note: provide Git tokens via Secret/env and avoid verbose logs in produ
 
 - Claude CLI:
   - `CLAUDE_CREDENTIALS_PATH` — Path to Claude credentials file. Default: `~/.claude/.credentials.json`.
+  - `CLAUDE_PATCH_CMD` — Template command for AI patch generation. Uses `{{instruction_file}}` and `{{repo_root}}` placeholders.
 
 - Debugging:
   - `DEBUG` — set to `1`, `true`, or `debug` to enable verbose backend logs (Axios request URLs, per-provider errors, clone details). Sensitive tokens are redacted in logs.
@@ -173,6 +175,19 @@ Security note: provide Git tokens via Secret/env and avoid verbose logs in produ
   - `GIT_AUTHOR_NAME` / `GIT_COMMITTER_NAME` — author/committer name used for `git commit`.
   - `GIT_AUTHOR_EMAIL` / `GIT_COMMITTER_EMAIL` — author/committer email.
   - If unset, backend uses `GH_USER` and `${GH_USER}@users.noreply.github.com` when available.
+
+- Deployment:
+  - `ARGO_WORKFLOW_URL` — Argo Workflows API endpoint for deploy. Default: `http://argo-workflows-ui.argo-workflows.svc.cluster.local:8080/api/workflows`.
+
+- UI Feature Flags (set to `1` or `true` to enable, hidden by default):
+  - `SHOW_BRANCH_SELECTOR` — Show the branch selector dropdown.
+  - `SHOW_ROLLBACK` — Show the rollback (discard changes) button.
+  - `SHOW_PUSH` — Show the standalone push button.
+  - `SHOW_COMMIT_HASH` — Show the commit hash badge and copy button.
+  - `SHOW_TEXT_SIZE` — Show terminal font size increase/decrease (A+/A-) buttons.
+
+- WebSocket:
+  - `WS_HEARTBEAT_INTERVAL_MS` — Ping interval for WebSocket keep-alive. Default: `30000` (30s).
 
 ## Dev
 
@@ -200,6 +215,12 @@ DEBUG=1
 # Optional: commit identity
 GIT_AUTHOR_NAME=web-claude
 GIT_AUTHOR_EMAIL=web-claude@example.invalid
+# UI feature flags (set to 1 to enable)
+SHOW_BRANCH_SELECTOR=0
+SHOW_ROLLBACK=0
+SHOW_PUSH=0
+SHOW_COMMIT_HASH=0
+SHOW_TEXT_SIZE=0
 ```
 
 ## Caveats / Next steps

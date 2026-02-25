@@ -4,7 +4,7 @@ import { FitAddon } from 'xterm-addon-fit';
 import { WebLinksAddon } from 'xterm-addon-web-links';
 import 'xterm/css/xterm.css';
 
-export default function ClaudeTerminal({ repoPath }) {
+export default function ClaudeTerminal({ repoPath, showTextSize }) {
   const ref = useRef(null);
   const containerRef = useRef(null);
   const termRef = useRef(null);
@@ -247,6 +247,8 @@ export default function ClaudeTerminal({ repoPath }) {
     >
       <div style={{display:'flex', justifyContent:'space-between', alignItems:'center', marginBottom:8}}>
         <div className="muted" style={{display:'flex', alignItems:'center', gap: 6}}>
+          {showTextSize && (
+          <>
           <button
             type="button"
             className="secondary"
@@ -270,6 +272,8 @@ export default function ClaudeTerminal({ repoPath }) {
               try { fitRef.current && fitRef.current.fit(); } catch {}
             }}
           >A-</button>
+          </>
+          )}
           <button
             type="button"
             className="secondary icon"
@@ -329,12 +333,14 @@ export default function ClaudeTerminal({ repoPath }) {
                 style={{ minWidth: 32 }}
                 onClick={(e) => {
                   e.preventDefault();
+                  // Blur to hide mobile keyboard
+                  try { e.currentTarget.blur(); document.activeElement?.blur(); } catch {}
                   const ws = wsRef.current;
                   if (ws && ws.readyState === WebSocket.OPEN) {
-                    ws.send(String(n));
+                    ws.send(String(n) + '\r');
                   }
                 }}
-                title={`Send ${n}`}
+                title={`Send ${n} + Enter`}
               >{n}</button>
             ))}
           </span>
