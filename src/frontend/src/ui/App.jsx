@@ -127,7 +127,7 @@ function RepoList({ repos, onSelect, currentId }) {
   )
 }
 
-function RepoActions({ repo, meta, setMeta, appConfig }) {
+function RepoActions({ repo, meta, setMeta, appConfig, onDeployState }) {
   const toast = useToast();
   const [log, setLog] = useState([]);
   const [patch, setPatch] = useState("");
@@ -284,16 +284,10 @@ function RepoActions({ repo, meta, setMeta, appConfig }) {
     if (autoSyncDoneRef.current) return;
     autoSyncDoneRef.current = true;
     try {
-      // Check for local changes and rollback
-      const diffRes = await axios.get("/api/git/diff", { params: { repoPath: meta.repoPath }, signal });
-      if ((diffRes.data.diff || "").trim()) {
-        await axios.post("/api/git/rollback", { repoPath: meta.repoPath });
-      }
-      // Pull if behind
-      const statusRes = await axios.get("/api/git/status", { params: { repoPath: meta.repoPath }, signal });
-      if (Number(statusRes.data.status?.behind || 0) > 0) {
-        await axios.post("/api/git/pull", { repoPath: meta.repoPath });
-      }
+      // Rollback all local changes
+      await axios.post("/api/git/rollback", { repoPath: meta.repoPath });
+      // Always fetch + pull to sync with remote
+      await axios.post("/api/git/pull", { repoPath: meta.repoPath });
     } catch (e) {
       if (e.name !== 'CanceledError' && e.name !== 'AbortError') {
         console.error("Auto-sync failed:", e);
@@ -684,10 +678,20 @@ function RepoActions({ repo, meta, setMeta, appConfig }) {
     }
   };
 
+  const onlyDeployVisible = !appConfig.showBranchSelector && !appConfig.showPush && !appConfig.showRollback && !appConfig.showCommitHash;
+
+  // Expose deploy state to parent when actions card is hidden
+  useEffect(() => {
+    if (onDeployState) {
+      onDeployState(onlyDeployVisible ? { deploying, doDeploy, hasLog: log.length > 0 } : null);
+    }
+  }, [onlyDeployVisible, deploying, log.length]);
+
   return (
     <div className="row">
       <div className="col main-col">
-        {/* Actions Card */}
+        {/* Actions Card - hidden when only deploy button would show */}
+        {!onlyDeployVisible && (
         <div className="card">
           <div className="card-header">
             <span className="card-title">Actions</span>
@@ -741,19 +745,6 @@ function RepoActions({ repo, meta, setMeta, appConfig }) {
               )}
             </div>
             )}
-            <button
-              className={`btn ${pulling ? 'btn-loading' : pullInfo.upToDate ? 'btn-success' : 'btn-secondary'}`}
-              onClick={doPull}
-              disabled={pulling}
-            >
-              {pulling ? (
-                <><span className="spinner" /><span className="btn-label"> Pulling...</span></>
-              ) : pullInfo.upToDate ? (
-                <><span className="icon">✓</span><span className="btn-label"> Up to date</span></>
-              ) : (
-                <><span className="icon">↓</span><span className="btn-label"> Pull</span></>
-              )}
-            </button>
             {appConfig.showPush && (
             <button
               className={`btn ${pushing ? 'btn-loading' : 'btn-primary'}`}
@@ -811,6 +802,7 @@ function RepoActions({ repo, meta, setMeta, appConfig }) {
             </div>
           )}
         </div>
+        )}
 
         <FileTree repoPath={meta.repoPath} onOpen={async (p)=>{ const r=await axios.get("/api/git/file",{params:{repoPath:meta.repoPath,path:p}}); }} />
       </div>
@@ -952,6 +944,7 @@ export default function App() {
   const routeRef = useRef({});
   const [pendingRepoId, setPendingRepoId] = useState("");
   const openingFromUrlRef = useRef(false);
+  const [deployState, setDeployState] = useState(null);
   const [appConfig, setAppConfig] = useState({
     showBranchSelector: false,
     showRollback: false,
@@ -1213,7 +1206,21 @@ export default function App() {
                 {(() => { const [prov, key] = (current||'').split(':'); return `${prov||''}${key? ' / ' + key : ''}`; })()}
                 {currentRepo ? ` / ${currentRepo.name}` : ''}
               </div>
-              <div style={{marginLeft:'auto'}}>
+              <div style={{marginLeft:'auto',display:'flex',alignItems:'center',gap:8}}>
+                {deployState && deployState.hasLog && (
+                  <button
+                    className={`btn ${deployState.deploying ? 'btn-loading' : 'btn-deploy'}`}
+                    onClick={deployState.doDeploy}
+                    disabled={deployState.deploying}
+                    title="Deploy via Argo Workflows"
+                  >
+                    {deployState.deploying ? (
+                      <><span className="spinner" /><span className="btn-label"> Deploying...</span></>
+                    ) : (
+                      <><span className="icon">🚀</span><span className="btn-label"> Deploy</span></>
+                    )}
+                  </button>
+                )}
                 <button className="secondary icon" onClick={cycleTheme} title={`Theme: ${themeMode}`}>{themeIcon}</button>
               </div>
             </div>
@@ -1223,6 +1230,7 @@ export default function App() {
             meta={meta}
             setMeta={setMeta}
             appConfig={appConfig}
+            onDeployState={setDeployState}
           />
         </div>
       )}
