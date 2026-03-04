@@ -46,6 +46,16 @@ RUN apk add --no-cache bash git g++ make python3 linux-headers github-cli glab \
 RUN npm i -g typescript tsx ts-node eslint prettier vite jest vitest \
     nodemon concurrently tsup
 
+# Pre-warm npm cache with project dependencies so `npm install` is instant
+RUN mkdir -p /tmp/warm-client /tmp/warm-server \
+    && cd /tmp/warm-client \
+    && printf '{"private":true,"dependencies":{"react":"^18.3.0","react-dom":"^18.3.0","react-router-dom":"^6.23.1","react-chartjs-2":"^5.3.0","chart.js":"^4.4.1","chartjs-adapter-date-fns":"^3.0.0","date-fns":"^3.6.0"},"devDependencies":{"@vitejs/plugin-react":"^4.3.0","vite":"^5.2.8"}}' > package.json \
+    && npm install \
+    && cd /tmp/warm-server \
+    && printf '{"private":true,"dependencies":{"dotenv":"^16.4.0","express":"^4.19.0","sequelize":"^6.37.1","mysql2":"^3.10.0","cors":"^2.8.5"}}' > package.json \
+    && npm install \
+    && rm -rf /tmp/warm-client /tmp/warm-server
+
 # Python build/test tools
 RUN pip3 install --break-system-packages --no-cache-dir \
     pytest black flake8 mypy pyyaml beautifulsoup4 lxml mysql-connector-python selenium
@@ -64,6 +74,7 @@ RUN chmod +x /entrypoint.sh
 
 # Create app user with home at /home/app (uid 1000 matches K8s securityContext)
 RUN mkdir -p /home/app/.claude /data/repos \
+    && cp -r /root/.npm /home/app/.npm \
     && chown -R 1000:1000 /home/app /data /app
 USER 1000
 ENV HOME=/home/app

@@ -1,8 +1,8 @@
-import React, { useEffect, useMemo, useRef, useState, useCallback } from "react";
+import React, { useEffect, useMemo, useRef, useState } from "react";
 import axios from "axios";
 import ClaudeTerminal from "./Terminal.jsx";
 import FileTree from "./FileTree.jsx";
-import DiffPretty from "./DiffPretty.jsx";
+// DiffPretty removed – we only show an "out of sync" indicator now
 import { ToastProvider, useToast } from "./ToastContext.jsx";
 
 // Helper to create cancellable axios requests
@@ -10,41 +10,6 @@ function createAbortController() {
   return new AbortController();
 }
 
-// Parse changed files from unified diff - extracted for caching
-function parseChangedFiles(patch) {
-  try {
-    const diff = patch || '';
-    const lines = diff.split(/\n/);
-    const out = [];
-    let i = 0;
-    while (i < lines.length) {
-      const line = lines[i];
-      const m = /^diff --git a\/(.+?) b\/(.+)$/.exec(line);
-      if (m) {
-        let from = m[1];
-        let to = m[2];
-        let status = 'modified';
-        let j = i + 1;
-        while (j < lines.length && !lines[j].startsWith('diff --git ')) {
-          const l = lines[j];
-          if (/^new file mode /.test(l)) status = 'added';
-          if (/^deleted file mode /.test(l)) status = 'deleted';
-          const rnTo = /^rename to (.+)$/.exec(l);
-          const rnFrom = /^rename from (.+)$/.exec(l);
-          if (rnTo || rnFrom) status = 'renamed';
-          if (rnTo) to = rnTo[1];
-          j++;
-        }
-        const path = status === 'deleted' ? from : to;
-        out.push({ path, status });
-        i = j;
-        continue;
-      }
-      i++;
-    }
-    return out;
-  } catch { return []; }
-}
 
 function getProviderItems(providers) {
   const items = [];
@@ -130,25 +95,14 @@ function RepoList({ repos, onSelect, currentId }) {
 function RepoActions({ repo, meta, setMeta, appConfig, onDeployState }) {
   const toast = useToast();
   const [log, setLog] = useState([]);
-  const [patch, setPatch] = useState("");
-  const [showPretty, setShowPretty] = useState(true);
-  const [prettyMode, setPrettyMode] = useState('unified');
-  const [selectedDiffFile, setSelectedDiffFile] = useState("");
-  const diffPaneRef = useRef(null);
-  const [isDiffFullscreen, setIsDiffFullscreen] = useState(false);
-  const [manualDiffFullscreen, setManualDiffFullscreen] = useState(false);
+  const [hasChanges, setHasChanges] = useState(false);
   const [pullInfo, setPullInfo] = useState({ at: null, upToDate: null, behind: 0 });
   const [pulling, setPulling] = useState(false);
   const [pushing, setPushing] = useState(false);
   const [rolling, setRolling] = useState(false);
-  const [changedFiles, setChangedFiles] = useState([]);
-  const [showAllChanged, setShowAllChanged] = useState(false);
   const [copied, setCopied] = useState(false);
   const copiedTimerRef = useRef(null);
   const [deploying, setDeploying] = useState(false);
-  const prevChangedCountRef = useRef(0);
-  const lastVibeAtRef = useRef(0);
-  const [diffCollapsed, setDiffCollapsed] = useState(true);
   const autoSyncDoneRef = useRef(false);
 
   // Branch management state
@@ -166,9 +120,6 @@ function RepoActions({ repo, meta, setMeta, appConfig, onDeployState }) {
   // Track if a polling request is in flight to prevent stacking
   const diffPendingRef = useRef(false);
   const statusPendingRef = useRef(false);
-  // Cache for parsed diff to avoid re-parsing
-  const lastPatchRef = useRef('');
-
   // Cleanup abort controllers on unmount
   useEffect(() => {
     return () => {
@@ -355,22 +306,11 @@ function RepoActions({ repo, meta, setMeta, appConfig, onDeployState }) {
         params: { repoPath: meta.repoPath },
         signal
       });
-      const newDiff = r.data.diff || "";
-      // Only update if diff actually changed (prevents unnecessary re-renders and re-parsing)
-      setPatch(prev => prev === newDiff ? prev : newDiff);
+      setHasChanges(Boolean(r.data.hasChanges));
     } finally {
       diffPendingRef.current = false;
     }
   };
-
-  // Parse changed files from unified diff - use useMemo for caching
-  const parsedChangedFiles = useMemo(() => parseChangedFiles(patch), [patch]);
-
-  // Update changed files only when parsed result changes
-  useEffect(() => {
-    setChangedFiles(parsedChangedFiles);
-    setShowAllChanged(false);
-  }, [parsedChangedFiles]);
 
   // Auto refresh diff every 5 seconds with proper cleanup
   useEffect(() => {
@@ -392,30 +332,6 @@ function RepoActions({ repo, meta, setMeta, appConfig, onDeployState }) {
       delete abortControllersRef.current.diff;
     };
   }, [meta.repoPath]);
-
-  // Mobile haptic: vibrate when changes appear/increase
-  useEffect(() => {
-    try {
-      const isTouch = (() => {
-        try { return (('ontouchstart' in window) || (navigator.maxTouchPoints > 0)); } catch { return false; }
-      })();
-      if (!isTouch) return; // only try on mobile/touch devices
-      const canVibrate = Boolean(navigator && typeof navigator.vibrate === 'function');
-      if (!canVibrate) return;
-      const prev = Number(prevChangedCountRef.current || 0);
-      const cur = Number((changedFiles || []).length || 0);
-      const now = Date.now();
-      // Vibrate when count increases, or when first change appears from 0
-      if ((cur > 0 && prev === 0) || (cur > prev)) {
-        // Rate limit to avoid spam during rapid refreshes
-        if (now - (lastVibeAtRef.current || 0) > 5000) {
-          try { navigator.vibrate([30, 40, 30]); } catch {}
-          lastVibeAtRef.current = now;
-        }
-      }
-      prevChangedCountRef.current = cur;
-    } catch {}
-  }, [changedFiles]);
 
   // Periodically refresh upstream status with proper cleanup
   useEffect(() => {
@@ -489,117 +405,6 @@ function RepoActions({ repo, meta, setMeta, appConfig, onDeployState }) {
     }
   };
 
-  // Keep selected file in sync with changed files list
-  useEffect(() => {
-    if (!selectedDiffFile) return;
-    const exists = changedFiles.some(f => f.path === selectedDiffFile);
-    if (!exists) setSelectedDiffFile("");
-  }, [changedFiles, selectedDiffFile]);
-
-  // Extract only the diff block for a given file
-  const extractFileDiff = (diffText, filePath) => {
-    try {
-      if (!diffText || !filePath) return diffText || "";
-      const lines = String(diffText).split(/\n/);
-      let i = 0;
-      while (i < lines.length) {
-        const line = lines[i];
-        if (line.startsWith('diff --git ')) {
-          const m = /^diff --git a\/(.+?) b\/(.+)$/.exec(line);
-          const from = m ? m[1] : '';
-          const to = m ? m[2] : '';
-          let j = i + 1;
-          while (j < lines.length && !lines[j].startsWith('diff --git ')) j++;
-          if (from === filePath || to === filePath) {
-            return lines.slice(i, j).join('\n');
-          }
-          i = j; continue;
-        }
-        i++;
-      }
-      return ""; // no match
-    } catch { return diffText || ""; }
-  };
-
-  const displayedPatch = useMemo(() => {
-    if (!selectedDiffFile) return patch || "";
-    return extractFileDiff(patch || "", selectedDiffFile) || "";
-  }, [patch, selectedDiffFile]);
-
-  // Fullscreen handling for diff pane
-  useEffect(() => {
-    const onFsChange = () => {
-      try {
-        const cur = document.fullscreenElement || document.webkitFullscreenElement || document.mozFullScreenElement || document.msFullscreenElement;
-        const active = Boolean(cur && (cur === diffPaneRef.current));
-        setIsDiffFullscreen(active);
-      } catch {}
-    };
-    document.addEventListener('fullscreenchange', onFsChange);
-    document.addEventListener('webkitfullscreenchange', onFsChange);
-    document.addEventListener('mozfullscreenchange', onFsChange);
-    document.addEventListener('MSFullscreenChange', onFsChange);
-    return () => {
-      document.removeEventListener('fullscreenchange', onFsChange);
-      document.removeEventListener('webkitfullscreenchange', onFsChange);
-      document.removeEventListener('mozfullscreenchange', onFsChange);
-      document.removeEventListener('MSFullscreenChange', onFsChange);
-    };
-  }, []);
-
-  const toggleDiffFullscreen = async () => {
-    try {
-      const node = diffPaneRef.current;
-      if (!node) return;
-      const cur = document.fullscreenElement || document.webkitFullscreenElement || document.mozFullScreenElement || document.msFullscreenElement;
-      const canNative = Boolean(
-        node.requestFullscreen || node.webkitRequestFullscreen || node.mozRequestFullScreen || node.msRequestFullscreen
-      );
-      if (canNative) {
-        try {
-          if (cur) {
-            if (document.exitFullscreen) await document.exitFullscreen();
-            else if (document.webkitExitFullscreen) await document.webkitExitFullscreen();
-            else if (document.mozCancelFullScreen) await document.mozCancelFullScreen();
-            else if (document.msExitFullscreen) await document.msExitFullscreen();
-          } else {
-            if (node.requestFullscreen) await node.requestFullscreen();
-            else if (node.webkitRequestFullscreen) await node.webkitRequestFullscreen();
-            else if (node.mozRequestFullScreen) await node.mozRequestFullScreen();
-            else if (node.msRequestFullscreen) await node.msRequestFullscreen();
-          }
-        } catch (e) {
-          // Native fullscreen failed (common on older mobile). Fallback to manual.
-          setManualDiffFullscreen(m => !m);
-        }
-      } else {
-        // No native support: use manual fullscreen overlay
-        setManualDiffFullscreen(m => !m);
-      }
-    } catch {}
-  };
-
-  // Prevent background scroll on manual fullscreen
-  useEffect(() => {
-    try {
-      const el = document.documentElement; const body = document.body;
-      if (manualDiffFullscreen) {
-        if (el) el.style.overflow = 'hidden';
-        if (body) body.style.overflow = 'hidden';
-      } else {
-        if (el) el.style.overflow = '';
-        if (body) body.style.overflow = '';
-      }
-    } catch {}
-    return () => {
-      try {
-        const el = document.documentElement; const body = document.body;
-        if (el) el.style.overflow = '';
-        if (body) body.style.overflow = '';
-      } catch {}
-    };
-  }, [manualDiffFullscreen]);
-
   const copyHash = async (hash) => {
     const onSuccess = () => {
       if (copiedTimerRef.current) clearTimeout(copiedTimerRef.current);
@@ -653,7 +458,7 @@ function RepoActions({ repo, meta, setMeta, appConfig, onDeployState }) {
     try {
       setDeploying(true);
       // Push first if there are local changes
-      if ((patch || "").trim()) {
+      if (hasChanges) {
         const message = "claude-" + new Date().toISOString();
         await axios.post("/api/git/commitPush", { repoPath: meta.repoPath, message });
         await refreshLog();
@@ -749,7 +554,7 @@ function RepoActions({ repo, meta, setMeta, appConfig, onDeployState }) {
             <button
               className={`btn ${pushing ? 'btn-loading' : 'btn-primary'}`}
               onClick={doApplyCommitPush}
-              disabled={!(patch||"").trim() || pushing}
+              disabled={!hasChanges || pushing}
             >
               {pushing ? (
                 <><span className="spinner" /><span className="btn-label"> Pushing...</span></>
@@ -762,7 +567,7 @@ function RepoActions({ repo, meta, setMeta, appConfig, onDeployState }) {
             <button
               className={`btn ${rolling ? 'btn-loading' : 'btn-danger'}`}
               onClick={doRollback}
-              disabled={!(patch||"").trim() || rolling}
+              disabled={!hasChanges || rolling}
               title="Discard all uncommitted changes"
             >
               {rolling ? (
@@ -811,75 +616,12 @@ function RepoActions({ repo, meta, setMeta, appConfig, onDeployState }) {
         <ClaudeTerminal repoPath={meta.repoPath} showTextSize={appConfig.showTextSize} />
       </div>
 
-      {/* Diff Preview Card - collapsed by default */}
-      {(patch || "").trim() && (
-        <div
-          ref={diffPaneRef}
-          className={`col diff-col card diff-card ${(isDiffFullscreen || manualDiffFullscreen) ? 'fullscreen' : ''}`}
-        >
-          <div className="card-header" onClick={() => setDiffCollapsed(c => !c)} style={{cursor:'pointer'}}>
-            <span className="card-title">
-              <span style={{display:'inline-block',transform:diffCollapsed?'rotate(-90deg)':'rotate(0deg)',transition:'transform 0.15s',marginRight:4}}>&#9660;</span>
-              Changes
-              {changedFiles.length > 0 && (
-                <span className="count-badge">{changedFiles.length}</span>
-              )}
-            </span>
-            {!diffCollapsed && (
-            <div className="view-toggles" onClick={e => e.stopPropagation()}>
-              <button
-                className={`toggle-btn ${showPretty ? '' : 'active'}`}
-                onClick={() => setShowPretty(false)}
-              >Raw</button>
-              <button
-                className={`toggle-btn ${showPretty && prettyMode === 'unified' ? 'active' : ''}`}
-                onClick={() => { setShowPretty(true); setPrettyMode('unified'); }}
-              >Unified</button>
-              <button
-                className={`toggle-btn ${showPretty && prettyMode === 'side-by-side' ? 'active' : ''}`}
-                onClick={() => { setShowPretty(true); setPrettyMode('side-by-side'); }}
-              >Side-by-Side</button>
-              <button
-                className="toggle-btn icon-btn"
-                onClick={toggleDiffFullscreen}
-              >
-                {(isDiffFullscreen || manualDiffFullscreen) ? '✕' : '⤢'}
-              </button>
-            </div>
-            )}
+      {/* Out of sync indicator */}
+      {hasChanges && (
+        <div className="col diff-col">
+          <div className="status-bar warning" style={{textAlign:'center'}}>
+            Out of sync
           </div>
-          {!diffCollapsed && (
-          <>
-          {changedFiles.length > 0 && (
-            <div className="file-chips">
-              {(showAllChanged ? changedFiles : changedFiles.slice(0, 10)).map((f, idx) => {
-                const active = selectedDiffFile === f.path;
-                return (
-                  <button
-                    key={idx}
-                    className={`chip ${f.status} ${active ? 'active' : ''}`}
-                    onClick={() => setSelectedDiffFile(p => (p === f.path ? "" : f.path))}
-                  >
-                    {f.path.split('/').pop()}
-                  </button>
-                );
-              })}
-              {(!showAllChanged && changedFiles.length > 10) && (
-                <button className="chip more" onClick={() => setShowAllChanged(true)}>
-                  +{changedFiles.length - 10}
-                </button>
-              )}
-            </div>
-          )}
-          <div className="diff-content">
-            {showPretty ? (
-              <DiffPretty diff={displayedPatch} mode={prettyMode} />
-            ) : (
-              <code className="diff-raw">{displayedPatch}</code>
-            )}
-          </div>
-          </>
-          )}
         </div>
       )}
 

@@ -10,7 +10,10 @@
       "Bash(xargs -I {} sh -c 'echo \"\"\"\"=== {} ===\"\"\"\" && head -40 {}')",
       "Bash(cd /data/repos/github/lukas-pastva/web-claude/src && npm run build 2>&1 | tail -302)",
       "Bash(cd /data/repos/github/lukas-pastva/web-claude && node -c src/backend/src/server.js 2>&1)",
-      "Bash(node --check /data/repos/github/lukas-pastva/web-claude/src/backend/src/server.js 2>&1; echo \"Exit: $?\")"
+      "Bash(node --check /data/repos/github/lukas-pastva/web-claude/src/backend/src/server.js 2>&1; echo \"Exit: $?\")",
+      "Bash(wc -l /data/repos/github/lukas-pastva/web-claude/src/frontend/src/ui/*.jsx)",
+      "Bash(cd /data/repos/github/lukas-pastva/web-claude/src/frontend && npx vite build 2>&1 | tail -20)",
+      "Bash(node --check /data/repos/github/lukas-pastva/web-claude/src/backend/src/server.js 2>&1 || echo \"Note: server.js uses ESM imports, syntax check may need different approach\")"
     ]
   }
 }

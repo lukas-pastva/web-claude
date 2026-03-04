@@ -337,10 +337,10 @@ export default function ClaudeTerminal({ repoPath, showTextSize }) {
                   try { e.currentTarget.blur(); document.activeElement?.blur(); } catch {}
                   const ws = wsRef.current;
                   if (ws && ws.readyState === WebSocket.OPEN) {
-                    ws.send(String(n) + '\r');
+                    ws.send(String(n));
                   }
                 }}
-                title={`Send ${n} + Enter`}
+                title={`Send ${n}`}
               >{n}</button>
             ))}
           </span>

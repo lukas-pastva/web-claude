@@ -376,50 +376,16 @@ app.get("/api/git/status", async (req, res) => {
   }
 });
 
-// ---- Git diff (working tree) ----
+// ---- Git diff (lightweight hasChanges check) ----
 app.get("/api/git/diff", async (req, res) => {
   try {
     const repoPath = req.query.repoPath;
     if (!repoPath) return res.status(400).json({ error: "repoPath is required" });
     const git = simpleGit(repoPath);
-
-    // Gather working tree diffs (unstaged + staged) and include untracked files
-    const parts = [];
-    let st;
-    try { st = await git.status(); } catch { st = null; }
-
-    try {
-      const diffUnstaged = await git.raw(["diff", "--no-ext-diff"]);
-      if ((diffUnstaged || "").trim()) parts.push(diffUnstaged.trim());
-    } catch {}
-    try {
-      const diffStaged = await git.raw(["diff", "--no-ext-diff", "--staged"]);
-      if ((diffStaged || "").trim()) parts.push(diffStaged.trim());
-    } catch {}
-
-    // Include untracked (not ignored) files by diffing against /dev/null
-    const untracked = Array.isArray(st?.not_added) ? st.not_added : [];
-    for (const p of untracked) {
-      try {
-        const abs = path.join(repoPath, p);
-        if (!fs.existsSync(abs)) continue;
-        const stat = fs.statSync(abs);
-        if (stat.isDirectory()) continue;
-        // Use raw git to allow non-zero exit with differences
-        const proc = spawnSync("git", ["diff", "--no-index", "--", "/dev/null", p], {
-          cwd: repoPath,
-          env: process.env,
-          encoding: "utf-8",
-          maxBuffer: 10 * 1024 * 1024
-        });
-        const out = proc.stdout || "";
-        if (out.trim()) parts.push(out.trim());
-      } catch {}
-    }
-
-    const diff = parts.join("\n\n");
+    const st = await git.status();
+    const hasChanges = !st.isClean();
     res.set("Cache-Control", "no-store");
-    res.json({ ok: true, diff });
+    res.json({ ok: true, hasChanges });
   } catch (err) {
     res.status(500).json({ error: err.message });
   }
