@@ -328,7 +328,13 @@ app.post("/api/git/commitPush", async (req, res) => {
       await git.addConfig("user.email", email);
     } catch {}
     const msg = message || `claude-${new Date().toISOString()}`;
-    const commit = await git.commit(msg);
+    let commit;
+    try {
+      commit = await git.commit(msg);
+    } catch (e) {
+      // Nothing to commit is OK — still push to sync with remote
+      commit = { commit: '' };
+    }
     // Push with token in remote URL if needed
     const remotes = await git.getRemotes(true);
     let origin = remotes.find(r => r.name === "origin");

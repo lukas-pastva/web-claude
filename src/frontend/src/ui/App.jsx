@@ -457,13 +457,11 @@ function RepoActions({ repo, meta, setMeta, appConfig, onDeployState }) {
     }
     try {
       setDeploying(true);
-      // Push first if there are local changes
-      if (hasChanges) {
-        const message = "claude-" + new Date().toISOString();
-        await axios.post("/api/git/commitPush", { repoPath: meta.repoPath, message });
-        await refreshLog();
-        await refreshDiff();
-      }
+      // Always commit+push before deploy to ensure remote is up to date
+      const message = "claude-" + new Date().toISOString();
+      await axios.post("/api/git/commitPush", { repoPath: meta.repoPath, message });
+      await refreshLog();
+      await refreshDiff();
       // Now deploy with latest commit
       const logRes = await axios.get("/api/git/log", { params: { repoPath: meta.repoPath } });
       const commits = logRes.data.commits || [];
@@ -485,12 +483,17 @@ function RepoActions({ repo, meta, setMeta, appConfig, onDeployState }) {
 
   const onlyDeployVisible = !appConfig.showBranchSelector && !appConfig.showPush && !appConfig.showRollback && !appConfig.showCommitHash;
 
+  // Use ref to always have the latest doDeploy without stale closures
+  const doDeployRef = useRef(doDeploy);
+  doDeployRef.current = doDeploy;
+  const stableDoDeploy = useMemo(() => () => doDeployRef.current(), []);
+
   // Expose deploy state to parent when actions card is hidden
   useEffect(() => {
     if (onDeployState) {
-      onDeployState(onlyDeployVisible ? { deploying, doDeploy, hasLog: log.length > 0 } : null);
+      onDeployState(onlyDeployVisible ? { deploying, doDeploy: stableDoDeploy, hasLog: log.length > 0, hasChanges } : null);
     }
-  }, [onlyDeployVisible, deploying, log.length]);
+  }, [onlyDeployVisible, deploying, hasChanges, log.length]);
 
   return (
     <div className="row">
@@ -590,8 +593,8 @@ function RepoActions({ repo, meta, setMeta, appConfig, onDeployState }) {
               <button
                 className={`btn ${deploying ? 'btn-loading' : 'btn-deploy'}`}
                 onClick={doDeploy}
-                disabled={deploying}
-                title="Deploy via Argo Workflows"
+                disabled={deploying || !hasChanges}
+                title={hasChanges ? "Deploy via Argo Workflows" : "No changes to deploy"}
               >
                 {deploying ? (
                   <><span className="spinner" /><span className="btn-label"> Deploying...</span></>
@@ -613,17 +616,9 @@ function RepoActions({ repo, meta, setMeta, appConfig, onDeployState }) {
       </div>
 
       <div className="col cli-col">
-        <ClaudeTerminal repoPath={meta.repoPath} showTextSize={appConfig.showTextSize} />
+        <ClaudeTerminal repoPath={meta.repoPath} showTextSize={appConfig.showTextSize} deployState={{ deploying, doDeploy: stableDoDeploy, hasChanges }} />
       </div>
 
-      {/* Out of sync indicator */}
-      {hasChanges && (
-        <div className="col diff-col">
-          <div className="status-bar warning" style={{textAlign:'center'}}>
-            Out of sync
-          </div>
-        </div>
-      )}
 
       {/* New Branch Modal */}
       {showNewBranchModal && (
@@ -949,20 +944,6 @@ export default function App() {
                 {currentRepo ? ` / ${currentRepo.name}` : ''}
               </div>
               <div style={{marginLeft:'auto',display:'flex',alignItems:'center',gap:8}}>
-                {deployState && deployState.hasLog && (
-                  <button
-                    className={`btn ${deployState.deploying ? 'btn-loading' : 'btn-deploy'}`}
-                    onClick={deployState.doDeploy}
-                    disabled={deployState.deploying}
-                    title="Deploy via Argo Workflows"
-                  >
-                    {deployState.deploying ? (
-                      <><span className="spinner" /><span className="btn-label"> Deploying...</span></>
-                    ) : (
-                      <><span className="icon">🚀</span><span className="btn-label"> Deploy</span></>
-                    )}
-                  </button>
-                )}
                 <button className="secondary icon" onClick={cycleTheme} title={`Theme: ${themeMode}`}>{themeIcon}</button>
               </div>
             </div>

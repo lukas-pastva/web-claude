@@ -4,7 +4,7 @@ import { FitAddon } from 'xterm-addon-fit';
 import { WebLinksAddon } from 'xterm-addon-web-links';
 import 'xterm/css/xterm.css';
 
-export default function ClaudeTerminal({ repoPath, showTextSize }) {
+export default function ClaudeTerminal({ repoPath, showTextSize, deployState }) {
   const ref = useRef(null);
   const containerRef = useRef(null);
   const termRef = useRef(null);
@@ -16,6 +16,9 @@ export default function ClaudeTerminal({ repoPath, showTextSize }) {
   const isMountedRef = useRef(true);
   // Track WebSocket connection state to prevent orphaned connections
   const wsStateRef = useRef('closed'); // 'closed' | 'connecting' | 'open'
+
+  // Auto-scroll: pause for 5s when user touches/clicks terminal
+  const autoScrollPausedUntilRef = useRef(0);
 
   const [showPasteModal, setShowPasteModal] = useState(false);
   const [pasteBuffer, setPasteBuffer] = useState("");
@@ -78,6 +81,15 @@ export default function ClaudeTerminal({ repoPath, showTextSize }) {
     window.addEventListener('resize', onResize);
     term.writeln('\x1b[1;34mweb-claude\x1b[0m — attaching to Claude CLI...');
 
+    // Pause auto-scroll for 5s on user interaction (touch/click/scroll)
+    const pauseAutoScroll = () => { autoScrollPausedUntilRef.current = Date.now() + 5000; };
+    const termEl = ref.current;
+    if (termEl) {
+      termEl.addEventListener('touchstart', pauseAutoScroll);
+      termEl.addEventListener('mousedown', pauseAutoScroll);
+      termEl.addEventListener('wheel', pauseAutoScroll);
+    }
+
     // Create WebSocket with state tracking
     const proto = (location.protocol === 'https:') ? 'wss' : 'ws';
     wsStateRef.current = 'connecting';
@@ -98,6 +110,10 @@ export default function ClaudeTerminal({ repoPath, showTextSize }) {
         s = String(ev.data);
       }
       term.write(s);
+      // Auto-scroll to bottom unless user recently interacted
+      if (Date.now() > autoScrollPausedUntilRef.current) {
+        term.scrollToBottom();
+      }
     };
 
     ws.onclose = () => {
@@ -153,6 +169,11 @@ export default function ClaudeTerminal({ repoPath, showTextSize }) {
       wsStateRef.current = 'closed';
       wsRef.current = null;
 
+      if (termEl) {
+        termEl.removeEventListener('touchstart', pauseAutoScroll);
+        termEl.removeEventListener('mousedown', pauseAutoScroll);
+        termEl.removeEventListener('wheel', pauseAutoScroll);
+      }
       window.removeEventListener('resize', onResize);
       term.dispose();
     };
@@ -312,18 +333,6 @@ export default function ClaudeTerminal({ repoPath, showTextSize }) {
             }}
             title="Paste clipboard into terminal"
           >📥</button>
-          <button
-            type="button"
-            className="secondary icon"
-            onClick={(e) => {
-              e.preventDefault();
-              const t = termRef.current;
-              if (t && typeof t.scrollToBottom === 'function') {
-                t.scrollToBottom();
-              }
-            }}
-            title="Scroll to bottom"
-          >⬇</button>
           <span style={{ marginLeft: 6, borderLeft: '1px solid #444', paddingLeft: 12, display: 'inline-flex', gap: 6 }}>
             {[1, 2].map(n => (
               <button
@@ -343,6 +352,19 @@ export default function ClaudeTerminal({ repoPath, showTextSize }) {
                 title={`Send ${n}`}
               >{n}</button>
             ))}
+            {deployState && (
+              <button
+                type="button"
+                className={deployState.deploying ? 'btn-loading' : 'secondary'}
+                style={{ minWidth: 32 }}
+                onClick={(e) => {
+                  e.preventDefault();
+                  deployState.doDeploy();
+                }}
+                disabled={deployState.deploying || !deployState.hasChanges}
+                title={deployState.hasChanges ? "Deploy" : "No changes to deploy"}
+              >{deployState.deploying ? '...' : '🚀'}</button>
+            )}
           </span>
         </div>
         <div>
